@@ -202,6 +202,34 @@ Nome do pacote a decidir (dois candidatos livres no npm hoje); `CLAUDE_GeoRelian
 
 ---
 
+## Parte 4 — Achados durante a Fase 1 (aguardam ciência do owner)
+
+### R-24 [A] Evidência conflitante sem cap viola a invariante da própria SPEC
+
+**Local:** §6.7 (tabela de caps e `consistencyFactor = 0.30`), INV-08, "adicionando outlier não pode aumentar consistência".
+
+**Risco:** um fix único e bom tem score bruto de até 94 e é limitado a 75 pelo cap `single_fix`. Se chega uma segunda leitura conflitante, o fator cai para 0,30 (bruto até 90), mas o cap `single_fix` deixa de valer e nenhum outro o substitui. Resultado: 75 → 90. Um outlier aumenta o score.
+
+**Alternativas:** (a) reaproveitar o cap `single_fix` para o caso conflitante; (b) cap próprio.
+
+**Implementado:** (b) cap `conflicting_evidence` = 75. É o menor ajuste que restaura a monotonicidade; o valor pode ser mais baixo se você preferir. **Impacto nos testes:** caso explícito em `TestScore` e propriedade SCR-010 em `TestProperties`.
+
+### R-25 [M] `roundHalfUp` ingênuo arredonda errado metades exatas
+
+**Local:** §6.7, §12.7, SCR-031. Em uma grade de 173.481 entradas cujo score bruto é matematicamente `x,5`, `floor(x + 0.5)` em `double` arredondou para baixo em 19.289 (11%), porque a soma ponderada cai em `x,49999999999999`. Exemplo: accuracy 0, idade 6000 ms, allowance 0, fix único → 91,5 exato, avaliado como 91,49999999999999.
+
+**Implementado:** viés de 1e-9 antes do `floor`. Determinístico entre plataformas (os fatores não usam trigonometria). Casos concretos adicionados a SCR-031.
+
+### R-26 [B] Hipóteses fixadas na Fase 1
+
+| Ponto | Escolha | Onde a SPEC é omissa |
+|---|---|---|
+| Tolerância de timestamp futuro (VAL-008) | 1000 ms; além disso o fix é rejeitado | "tolerância documentada" sem valor |
+| Fix com tempo não confiável | rejeitado na ingestão, contado, nunca armazenado | §5.5 e §6.1 permitem as duas leituras |
+| Cap `unknown_movement_not_fresh` | só com `source = cached` | "fix não fresco" sem definição; segue a tabela de D-06 |
+| Reason codes de R-12 | os sete nomes sugeridos foram adotados | R-12 não era uma decisão D-xx |
+| Fix novo mais antigo que todo o buffer cheio | descartado (`DroppedAsOldest`) | não previsto |
+
 ## Decisões — aprovadas pelo owner em 14/11/2026
 
 | ID | Decisão | Resultado |
