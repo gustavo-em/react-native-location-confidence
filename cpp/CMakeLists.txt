@@ -19,6 +19,7 @@ add_library(location_confidence_core STATIC
   src/QualityScore.cpp
   src/ReadingChecker.cpp
   src/ReasonCodes.cpp
+  src/UncertaintyModel.cpp
 )
 
 set_target_properties(location_confidence_core PROPERTIES
@@ -57,6 +58,7 @@ if(LCE_BUILD_TESTS)
     tests/TestReasonCodes.cpp
     tests/TestRelation.cpp
     tests/TestScore.cpp
+    tests/TestUncertainty.cpp
     tests/TestValidation.cpp
   )
   set_target_properties(lce_tests PROPERTIES
