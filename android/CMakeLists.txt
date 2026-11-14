@@ -1,6 +1,11 @@
 cmake_minimum_required(VERSION 3.13)
 project(LocationConfidenceJni LANGUAGES CXX)
 
+# Only JNI_OnLoad is exported from the shared library; the core and its C
+# facade stay internal.
+set(CMAKE_CXX_VISIBILITY_PRESET hidden)
+set(CMAKE_VISIBILITY_INLINES_HIDDEN ON)
+
 # Shared core, compiled from source for each ABI. It does not link against
 # React Native: the JNI library only exposes plain JNI functions.
 set(LCE_CXX_STANDARD 17)
