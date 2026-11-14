@@ -1,7 +1,18 @@
-// Bounded in-memory history of measured fixes for one session.
+// The short memory of one session: the last few location readings.
 //
-// Fixed capacity, no allocation, ordered by capture time. Not thread-safe:
-// the owning session is confined to a single serial queue by the platform.
+// Why keep a history? If the GPS fails to answer right now, a good reading
+// from 10 seconds ago may still be useful. And several readings that agree
+// with each other are stronger evidence than a single one.
+//
+// Rules of this memory:
+//   - it holds at most 10 readings (MAX_STORED_LOCATIONS);
+//   - readings are kept sorted by the time they were taken, oldest first;
+//   - the same reading delivered twice is stored only once;
+//   - readings older than 2 minutes are forgotten;
+//   - it lives only in RAM: nothing is ever written to disk.
+//
+// It must be used from one thread at a time. The platform code guarantees
+// that by sending all work for the engine through a single queue.
 #ifndef LCE_LOCATION_HISTORY_HPP
 #define LCE_LOCATION_HISTORY_HPP
 
@@ -16,65 +27,89 @@ namespace lce {
 
 class LocationHistory {
  public:
-  enum class InsertResult : std::uint8_t {
-    Inserted,
-    // Stored, but its capture time is older than a fix already in the buffer.
-    InsertedOutOfOrder,
-    // Same provider, capture time, position and accuracy as a stored fix.
-    Duplicate,
-    // Older than the retention window when it arrived.
-    DroppedExpired,
-    // Buffer full and the new fix would itself be the eviction victim.
-    DroppedAsOldest,
+  // What happened when we tried to store a reading.
+  enum class StoreResult : std::uint8_t {
+    // Stored normally.
+    Stored,
+    // Stored, but it was taken BEFORE a reading we already had. This happens
+    // when the system delivers readings late or out of order.
+    StoredOutOfOrder,
+    // Not stored: it is the same reading we already have, delivered again.
+    IgnoredDuplicate,
+    // Not stored: it was already older than 2 minutes when it arrived.
+    IgnoredTooOld,
+    // Not stored: the memory is full and this reading is older than
+    // everything we could remove to make room for it.
+    IgnoredOlderThanAllStored,
   };
 
+  // Counters for the diagnostics part of the final report.
   struct Stats {
-    std::uint64_t received = 0;
-    std::uint64_t duplicates = 0;
-    std::uint64_t evicted = 0;
-    std::uint64_t pruned = 0;
+    std::uint64_t received = 0;           // every reading offered to `store`
+    std::uint64_t duplicates = 0;         // ignored because we already had them
+    std::uint64_t removedToMakeRoom = 0;  // lost their place because the memory was full
+    std::uint64_t removedForAge = 0;      // forgotten for being older than 2 minutes
   };
 
-  static constexpr std::size_t capacity() noexcept { return kHistoryCapacity; }
+  static constexpr std::size_t capacity() noexcept { return MAX_STORED_LOCATIONS; }
 
-  // Inserts a validated sample, assigning its sequence number.
+  // Tries to store one reading that already passed `checkReading`.
   //
-  // When the buffer is full the oldest fix is evicted, except the one whose
-  // sequence equals `protectedSequence` (the current best candidate), so that
-  // a burst of poor readings cannot push out the only good one.
-  InsertResult insert(const LocationSample& sample,
-                      std::int64_t nowMonotonicMs,
-                      std::optional<std::uint64_t> protectedSequence = std::nullopt) noexcept;
+  // `protectedArrivalNumber` (optional) names the one reading that must not
+  // be removed to make room: the best reading we currently have. Without
+  // this, ten poor readings in a row would push out the only good one.
+  StoreResult store(const LocationReading& newReading,
+                    std::int64_t nowMs,
+                    std::optional<std::uint64_t> protectedArrivalNumber = std::nullopt) noexcept;
 
-  // Removes fixes older than the retention window.
-  void prune(std::int64_t nowMonotonicMs) noexcept;
+  // Forgets every reading older than 2 minutes.
+  void forgetOldReadings(std::int64_t nowMs) noexcept;
 
-  // Erases every stored fix. Sequence numbers keep increasing afterwards.
+  // Forgets everything. Used when the app clears or stops a session, so no
+  // trace of one user's locations is left for the next.
   void clear() noexcept;
 
-  std::size_t size() const noexcept { return size_; }
-  bool empty() const noexcept { return size_ == 0; }
+  std::size_t size() const noexcept { return count_; }
+  bool empty() const noexcept { return count_ == 0; }
 
-  // Fixes in ascending capture time; ties keep insertion order.
-  const LocationSample& at(std::size_t index) const noexcept { return samples_[index]; }
-  const LocationSample* begin() const noexcept { return samples_.data(); }
-  const LocationSample* end() const noexcept { return samples_.data() + size_; }
+  // Reading at a position, where 0 is the oldest.
+  const LocationReading& at(std::size_t index) const noexcept { return readings_[index]; }
 
-  // Most recently captured fix, or nullptr when empty.
-  const LocationSample* newest() const noexcept {
-    return size_ == 0 ? nullptr : &samples_[size_ - 1];
+  // These two let callers write: for (const LocationReading& r : history)
+  const LocationReading* begin() const noexcept { return readings_.data(); }
+  const LocationReading* end() const noexcept { return readings_.data() + count_; }
+
+  // The most recently taken reading, or nullptr when the memory is empty.
+  const LocationReading* newest() const noexcept {
+    return count_ == 0 ? nullptr : &readings_[count_ - 1];
   }
 
   const Stats& stats() const noexcept { return stats_; }
 
  private:
-  bool containsDuplicateOf(const LocationSample& sample) const noexcept;
-  void removeAt(std::size_t index) noexcept;
-  void insertAt(std::size_t index, const LocationSample& sample) noexcept;
+  bool isFull() const noexcept { return count_ == MAX_STORED_LOCATIONS; }
 
-  std::array<LocationSample, kHistoryCapacity> samples_{};
-  std::size_t size_ = 0;
-  std::uint64_t nextSequence_ = 1;
+  // Do we already hold this exact reading?
+  bool alreadyHave(const LocationReading& reading) const noexcept;
+
+  // At which position must a reading go so the list stays sorted by time?
+  std::size_t findPositionThatKeepsTimeOrder(const LocationReading& reading) const noexcept;
+
+  // The memory is full: which stored reading gives up its place?
+  // Returns no position when the answer is "none: drop the new reading".
+  std::optional<std::size_t> chooseReadingToRemove(
+      std::size_t positionOfNewReading,
+      std::optional<std::uint64_t> protectedArrivalNumber) const noexcept;
+
+  void removeAt(std::size_t index) noexcept;
+  void insertAt(std::size_t index, const LocationReading& reading) noexcept;
+
+  // Fixed-size storage: 10 slots that always exist. `count_` says how many
+  // of them hold a real reading (slots 0 .. count_-1).
+  std::array<LocationReading, MAX_STORED_LOCATIONS> readings_{};
+  std::size_t count_ = 0;
+
+  std::uint64_t nextArrivalNumber_ = 1;
   Stats stats_{};
 };
 

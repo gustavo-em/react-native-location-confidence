@@ -4,8 +4,9 @@ namespace lce {
 
 namespace {
 
-// Order must match the ReasonCode enum exactly.
-constexpr const char* kNames[] = {
+// Public text of each reason, in exactly the same order as the ReasonCode
+// list in ReasonCodes.hpp. Apps depend on these texts: never rename one.
+constexpr const char* REASON_NAMES[] = {
     "permission_not_determined",
     "permission_denied",
     "permission_restricted",
@@ -51,14 +52,17 @@ constexpr const char* kNames[] = {
     "uncertainty_model_heuristic",
 };
 
-static_assert(sizeof(kNames) / sizeof(kNames[0]) == kReasonCodeCount,
-              "reason code name table is out of sync with the enum");
+// The build fails here if someone adds a reason to the list in the header
+// and forgets to add its text above (or the other way around).
+static_assert(sizeof(REASON_NAMES) / sizeof(REASON_NAMES[0]) == REASON_CODE_COUNT,
+              "the list of reason names does not match the ReasonCode list");
 
 }  // namespace
 
 const char* reasonCodeName(ReasonCode code) noexcept {
-  const auto index = static_cast<std::size_t>(code);
-  return index < kReasonCodeCount ? kNames[index] : nullptr;
+  const std::size_t position = static_cast<std::size_t>(code);
+  const bool isARealReason = position < REASON_CODE_COUNT;
+  return isARealReason ? REASON_NAMES[position] : nullptr;
 }
 
 }  // namespace lce

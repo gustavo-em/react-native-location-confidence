@@ -4,120 +4,166 @@ namespace lce {
 
 namespace {
 
-bool isExpired(const LocationSample& sample, std::int64_t nowMonotonicMs) noexcept {
-  return ageMs(sample, nowMonotonicMs) > kHistoryRetentionMs;
+bool isTooOldToKeep(const LocationReading& reading, std::int64_t nowMs) noexcept {
+  return ageInMs(reading, nowMs) > MAX_AGE_IN_HISTORY_MS;
+}
+
+// Two readings are "the same reading delivered twice" only when everything
+// that identifies them is identical: same provider, same capture time, same
+// position and same accuracy.
+//
+// A reading at the same place but taken one second later is NOT a duplicate:
+// it is new evidence that the phone is still there.
+bool isSameReading(const LocationReading& first, const LocationReading& second) noexcept {
+  return first.provider == second.provider &&
+         first.capturedAtMs == second.capturedAtMs &&
+         first.position.latitudeDegrees == second.position.latitudeDegrees &&
+         first.position.longitudeDegrees == second.position.longitudeDegrees &&
+         first.horizontalAccuracyMeters == second.horizontalAccuracyMeters;
 }
 
 }  // namespace
 
-bool LocationHistory::containsDuplicateOf(const LocationSample& sample) const noexcept {
-  for (std::size_t i = 0; i < size_; ++i) {
-    const LocationSample& stored = samples_[i];
-    // Strict equivalence: a repeated callback, not merely a nearby reading.
-    if (stored.provider == sample.provider &&
-        stored.fixTimeMonotonicMs == sample.fixTimeMonotonicMs &&
-        stored.position.latitudeDeg == sample.position.latitudeDeg &&
-        stored.position.longitudeDeg == sample.position.longitudeDeg &&
-        stored.horizontalAccuracyMeters == sample.horizontalAccuracyMeters) {
+bool LocationHistory::alreadyHave(const LocationReading& reading) const noexcept {
+  for (std::size_t index = 0; index < count_; ++index) {
+    if (isSameReading(readings_[index], reading)) {
       return true;
     }
   }
   return false;
 }
 
+std::size_t LocationHistory::findPositionThatKeepsTimeOrder(
+    const LocationReading& reading) const noexcept {
+  // Start at the end (after the newest) and walk back while the stored
+  // reading in front of us was taken later than the new one.
+  //
+  // Readings with the same capture time are left in front, so among equals
+  // the one that arrived first stays first.
+  std::size_t position = count_;
+  while (position > 0 && readings_[position - 1].capturedAtMs > reading.capturedAtMs) {
+    --position;
+  }
+  return position;
+}
+
+std::optional<std::size_t> LocationHistory::chooseReadingToRemove(
+    std::size_t positionOfNewReading,
+    std::optional<std::uint64_t> protectedArrivalNumber) const noexcept {
+  // Picture all readings in a line, oldest first, with the new one standing
+  // at `positionOfNewReading`. We walk the line from the oldest and the
+  // first reading that is not protected loses its place.
+  //
+  // Stored readings older than the new one come first in the line:
+  for (std::size_t index = 0; index < positionOfNewReading; ++index) {
+    const bool isTheProtectedOne =
+        protectedArrivalNumber.has_value() &&
+        readings_[index].arrivalNumber == *protectedArrivalNumber;
+    if (!isTheProtectedOne) {
+      return index;
+    }
+  }
+
+  // Next in line is the new reading itself, and it is never protected.
+  // So the new reading is the one that does not get in.
+  return std::nullopt;
+}
+
 void LocationHistory::removeAt(std::size_t index) noexcept {
-  for (std::size_t i = index; i + 1 < size_; ++i) {
-    samples_[i] = samples_[i + 1];
+  // Close the gap: every later reading moves one slot towards the front.
+  for (std::size_t slot = index; slot + 1 < count_; ++slot) {
+    readings_[slot] = readings_[slot + 1];
   }
-  --size_;
-  samples_[size_] = LocationSample{};  // do not keep stale coordinates around
+  --count_;
+
+  // Wipe the slot that is now unused, so old coordinates do not linger in
+  // memory after they were supposed to be forgotten.
+  readings_[count_] = LocationReading{};
 }
 
-void LocationHistory::insertAt(std::size_t index, const LocationSample& sample) noexcept {
-  for (std::size_t i = size_; i > index; --i) {
-    samples_[i] = samples_[i - 1];
+void LocationHistory::insertAt(std::size_t index, const LocationReading& reading) noexcept {
+  // Open a gap: every reading from `index` on moves one slot towards the end.
+  for (std::size_t slot = count_; slot > index; --slot) {
+    readings_[slot] = readings_[slot - 1];
   }
-  samples_[index] = sample;
-  ++size_;
+  readings_[index] = reading;
+  ++count_;
 }
 
-void LocationHistory::prune(std::int64_t nowMonotonicMs) noexcept {
-  std::size_t i = 0;
-  while (i < size_) {
-    if (isExpired(samples_[i], nowMonotonicMs)) {
-      removeAt(i);
-      ++stats_.pruned;
+void LocationHistory::forgetOldReadings(std::int64_t nowMs) noexcept {
+  std::size_t index = 0;
+  while (index < count_) {
+    if (isTooOldToKeep(readings_[index], nowMs)) {
+      removeAt(index);  // the next reading slides into `index`, so do not advance
+      ++stats_.removedForAge;
     } else {
-      ++i;
+      ++index;
     }
   }
 }
 
 void LocationHistory::clear() noexcept {
-  for (std::size_t i = 0; i < size_; ++i) {
-    samples_[i] = LocationSample{};
+  for (std::size_t index = 0; index < count_; ++index) {
+    readings_[index] = LocationReading{};
   }
-  size_ = 0;
+  count_ = 0;
+  // `nextArrivalNumber_` is deliberately not reset: a number handed out
+  // before the clear must never be given to a different reading.
 }
 
-LocationHistory::InsertResult LocationHistory::insert(
-    const LocationSample& sample,
-    std::int64_t nowMonotonicMs,
-    std::optional<std::uint64_t> protectedSequence) noexcept {
+LocationHistory::StoreResult LocationHistory::store(
+    const LocationReading& newReading,
+    std::int64_t nowMs,
+    std::optional<std::uint64_t> protectedArrivalNumber) noexcept {
   ++stats_.received;
 
-  prune(nowMonotonicMs);
+  // Step 1: housekeeping. Drop what has become too old since the last call.
+  forgetOldReadings(nowMs);
 
-  if (isExpired(sample, nowMonotonicMs)) {
-    ++stats_.pruned;
-    return InsertResult::DroppedExpired;
+  // Step 2: a reading that arrives already older than 2 minutes is useless.
+  if (isTooOldToKeep(newReading, nowMs)) {
+    ++stats_.removedForAge;
+    return StoreResult::IgnoredTooOld;
   }
 
-  if (containsDuplicateOf(sample)) {
+  // Step 3: the system sometimes delivers the same reading twice. Storing it
+  // twice would make one piece of evidence look like two.
+  if (alreadyHave(newReading)) {
     ++stats_.duplicates;
-    return InsertResult::Duplicate;
+    return StoreResult::IgnoredDuplicate;
   }
 
-  // Position that keeps ascending capture time; equal times go after the
-  // fixes already stored, so arrival order breaks the tie.
-  std::size_t position = size_;
-  while (position > 0 && samples_[position - 1].fixTimeMonotonicMs > sample.fixTimeMonotonicMs) {
-    --position;
-  }
-  const bool outOfOrder = position < size_;
+  // Step 4: find where it goes so the list stays sorted by capture time.
+  std::size_t position = findPositionThatKeepsTimeOrder(newReading);
+  const bool wasTakenBeforeSomethingWeAlreadyHave = position < count_;
 
-  if (size_ == kHistoryCapacity) {
-    // Victim: the oldest fix that is not protected, considering the new fix
-    // at `position` as part of the ordering.
-    std::size_t victim = 0;
-    bool victimIsIncoming = false;
-    for (std::size_t slot = 0; slot <= size_; ++slot) {
-      if (slot == position) {
-        victimIsIncoming = true;
-        break;
-      }
-      const std::size_t stored = slot < position ? slot : slot - 1;
-      if (!protectedSequence || samples_[stored].sequence != *protectedSequence) {
-        victim = stored;
-        break;
-      }
+  // Step 5: if the memory is full, someone has to leave.
+  if (isFull()) {
+    ++stats_.removedToMakeRoom;
+
+    const std::optional<std::size_t> positionToRemove =
+        chooseReadingToRemove(position, protectedArrivalNumber);
+
+    const bool theNewReadingIsTheOneLeftOut = !positionToRemove.has_value();
+    if (theNewReadingIsTheOneLeftOut) {
+      return StoreResult::IgnoredOlderThanAllStored;
     }
 
-    ++stats_.evicted;
-    if (victimIsIncoming) {
-      return InsertResult::DroppedAsOldest;
-    }
-    removeAt(victim);
-    if (victim < position) {
+    removeAt(*positionToRemove);
+
+    // Removing a reading in front of our position shifts our position by one.
+    if (*positionToRemove < position) {
       --position;
     }
   }
 
-  LocationSample stored = sample;
-  stored.sequence = nextSequence_++;
+  // Step 6: store it, stamped with the next arrival number.
+  LocationReading stored = newReading;
+  stored.arrivalNumber = nextArrivalNumber_++;
   insertAt(position, stored);
 
-  return outOfOrder ? InsertResult::InsertedOutOfOrder : InsertResult::Inserted;
+  return wasTakenBeforeSomethingWeAlreadyHave ? StoreResult::StoredOutOfOrder
+                                              : StoreResult::Stored;
 }
 
 }  // namespace lce

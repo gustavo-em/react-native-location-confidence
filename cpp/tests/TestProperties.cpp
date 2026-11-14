@@ -25,25 +25,25 @@ ScoreInput randomScoreInput(DeterministicRng& rng) {
   if (highQuality) {
     input.horizontalAccuracyMeters = rng.uniform(0.0, 20.0);
     input.ageMs = rng.uniform(0.0, 5000.0);
-    input.movementAllowanceMeters = rng.uniform(0.0, 10.0);
-    input.movementUnknown = false;
+    input.possibleMovementMeters = rng.uniform(0.0, 10.0);
+    input.movementIsUnknown = false;
     input.consistency = static_cast<Consistency>(rng.below(4));
     input.source = static_cast<FixSource>(rng.below(2));  // Fresh, Recovered
-    input.approximatePermission = false;
+    input.onlyApproximatePermission = false;
     input.suspectedJump = false;
-    input.mockFlag = MockFlag::NotReported;
+    input.mockSignal = MockSignal::NotFlaggedByOs;
     input.mockPolicy = MockPolicy::ZeroScore;
     return input;
   }
   input.horizontalAccuracyMeters = rng.uniform(0.0, 400.0);
   input.ageMs = rng.uniform(0.0, 90000.0);
-  input.movementAllowanceMeters = rng.uniform(0.0, 500.0);
-  input.movementUnknown = rng.below(2) == 0;
+  input.possibleMovementMeters = rng.uniform(0.0, 500.0);
+  input.movementIsUnknown = rng.below(2) == 0;
   input.consistency = static_cast<Consistency>(rng.below(4));
   input.source = static_cast<FixSource>(rng.below(3));  // Fresh, Recovered, Cached
-  input.approximatePermission = rng.below(4) == 0;
+  input.onlyApproximatePermission = rng.below(4) == 0;
   input.suspectedJump = rng.below(5) == 0;
-  input.mockFlag = static_cast<MockFlag>(rng.below(3));
+  input.mockSignal = static_cast<MockSignal>(rng.below(3));
   input.mockPolicy = static_cast<MockPolicy>(rng.below(2));
   return input;
 }
@@ -55,8 +55,8 @@ TEST_CASE("GEO-024 distance is symmetric for 1000 random pairs") {
   for (int i = 0; i < 1000; ++i) {
     const Coordinates a{rng.uniform(-90.0, 90.0), rng.uniform(-180.0, 180.0)};
     const Coordinates b{rng.uniform(-90.0, 90.0), rng.uniform(-180.0, 180.0)};
-    const double ab = haversineMeters(a, b);
-    const double ba = haversineMeters(b, a);
+    const double ab = distanceBetweenMeters(a, b);
+    const double ba = distanceBetweenMeters(b, a);
     REQUIRE(std::isfinite(ab));
     REQUIRE(ab >= 0.0);
     REQUIRE(std::abs(ab - ba) <= 1e-7 * std::max(ab, 1.0));
@@ -66,13 +66,13 @@ TEST_CASE("GEO-024 distance is symmetric for 1000 random pairs") {
 TEST_CASE("GEO-025 distance changes continuously as the destination moves") {
   const Coordinates fix{-20.8117, -49.3768};
   const double stepDeg = 1e-5;  // about 1.11 m along the meridian
-  const double expectedStep = stepDeg * kEarthMeanRadiusMeters * 3.14159265358979323846 / 180.0;
+  const double expectedStep = stepDeg * EARTH_RADIUS_METERS * 3.14159265358979323846 / 180.0;
 
-  double previous = haversineMeters(fix, fix);
+  double previous = distanceBetweenMeters(fix, fix);
   CHECK(previous == 0.0);
   for (int i = 1; i <= 1000; ++i) {
-    const Coordinates destination{fix.latitudeDeg + i * stepDeg, fix.longitudeDeg};
-    const double current = haversineMeters(fix, destination);
+    const Coordinates destination{fix.latitudeDegrees + i * stepDeg, fix.longitudeDegrees};
+    const double current = distanceBetweenMeters(fix, destination);
     REQUIRE(current > previous);
     REQUIRE(std::abs((current - previous) - expectedStep) < 1e-3);
     previous = current;
@@ -85,7 +85,7 @@ TEST_CASE("SCR-006 score never increases when only the age grows") {
     const ScoreInput base = randomScoreInput(rng);
     ScoreInput older = base;
     older.ageMs = base.ageMs + rng.uniform(0.0, 60000.0);
-    REQUIRE(evaluateQualityScore(older).qualityScore <= evaluateQualityScore(base).qualityScore);
+    REQUIRE(calculateQualityScore(older).qualityScore <= calculateQualityScore(base).qualityScore);
   }
 }
 
@@ -95,7 +95,7 @@ TEST_CASE("SCR-007 score never increases when only the accuracy worsens") {
     const ScoreInput base = randomScoreInput(rng);
     ScoreInput worse = base;
     worse.horizontalAccuracyMeters = base.horizontalAccuracyMeters + rng.uniform(0.0, 300.0);
-    REQUIRE(evaluateQualityScore(worse).qualityScore <= evaluateQualityScore(base).qualityScore);
+    REQUIRE(calculateQualityScore(worse).qualityScore <= calculateQualityScore(base).qualityScore);
   }
 }
 
@@ -103,13 +103,13 @@ TEST_CASE("SCR-008 losing movement evidence never increases the score (score lev
   DeterministicRng rng(0x5343523038ULL);
   for (int i = 0; i < kIterations; ++i) {
     ScoreInput covered = randomScoreInput(rng);
-    covered.movementUnknown = false;
+    covered.movementIsUnknown = false;
     ScoreInput unknown = covered;
-    unknown.movementUnknown = true;
+    unknown.movementIsUnknown = true;
     // Without evidence the bound can only be wider.
-    unknown.movementAllowanceMeters = covered.movementAllowanceMeters + rng.uniform(0.0, 400.0);
-    REQUIRE(evaluateQualityScore(unknown).qualityScore <=
-            evaluateQualityScore(covered).qualityScore);
+    unknown.possibleMovementMeters = covered.possibleMovementMeters + rng.uniform(0.0, 400.0);
+    REQUIRE(calculateQualityScore(unknown).qualityScore <=
+            calculateQualityScore(covered).qualityScore);
   }
 }
 
@@ -118,30 +118,30 @@ TEST_CASE("SCR-010 conflicting evidence or a jump flag never increases the score
   for (int i = 0; i < kIterations; ++i) {
     ScoreInput base = randomScoreInput(rng);
     base.suspectedJump = false;
-    if (base.consistency == Consistency::Conflicting) {
-      base.consistency = Consistency::SingleFix;
+    if (base.consistency == Consistency::ReadingsDisagree) {
+      base.consistency = Consistency::OneReadingOnly;
     }
-    const int baseScore = evaluateQualityScore(base).qualityScore;
+    const int baseScore = calculateQualityScore(base).qualityScore;
 
     ScoreInput conflicting = base;
-    conflicting.consistency = Consistency::Conflicting;
-    REQUIRE(evaluateQualityScore(conflicting).qualityScore <= baseScore);
+    conflicting.consistency = Consistency::ReadingsDisagree;
+    REQUIRE(calculateQualityScore(conflicting).qualityScore <= baseScore);
 
     ScoreInput jump = base;
     jump.suspectedJump = true;
-    REQUIRE(evaluateQualityScore(jump).qualityScore <= baseScore);
+    REQUIRE(calculateQualityScore(jump).qualityScore <= baseScore);
   }
 }
 
 TEST_CASE("score property: the result never exceeds any applied cap") {
   DeterministicRng rng(0x4341505321ULL);
   for (int i = 0; i < kIterations; ++i) {
-    const ScoreResult result = evaluateQualityScore(randomScoreInput(rng));
+    const ScoreResult result = calculateQualityScore(randomScoreInput(rng));
     REQUIRE(result.qualityScore >= 0);
     REQUIRE(result.qualityScore <= 100);
-    for (std::size_t cap = 0; cap < static_cast<std::size_t>(ScoreCap::Count); ++cap) {
-      if (result.capApplied(static_cast<ScoreCap>(cap))) {
-        REQUIRE(result.qualityScore <= scoreCapLimit(static_cast<ScoreCap>(cap)));
+    for (std::size_t cap = 0; cap < static_cast<std::size_t>(ScoreLimit::Count); ++cap) {
+      if (result.wasLimitedBy(static_cast<ScoreLimit>(cap))) {
+        REQUIRE(result.qualityScore <= highestScoreAllowedBy(static_cast<ScoreLimit>(cap)));
       }
     }
   }
@@ -151,10 +151,10 @@ TEST_CASE("score property: same input gives the same output") {
   DeterministicRng rng(0x5245503239ULL);
   for (int i = 0; i < 500; ++i) {
     const ScoreInput input = randomScoreInput(rng);
-    const ScoreResult first = evaluateQualityScore(input);
-    const ScoreResult second = evaluateQualityScore(input);
+    const ScoreResult first = calculateQualityScore(input);
+    const ScoreResult second = calculateQualityScore(input);
     REQUIRE(first.qualityScore == second.qualityScore);
     REQUIRE(first.rawScore == second.rawScore);
-    REQUIRE(first.appliedCapsMask == second.appliedCapsMask);
+    REQUIRE(first.limitWasApplied == second.limitWasApplied);
   }
 }

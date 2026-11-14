@@ -1,7 +1,11 @@
-// Core value types shared by every module of the Location Confidence core.
+// The basic vocabulary of the engine.
 //
-// Pure C++17: no platform SDK, no React Native, no clocks. All times are
-// monotonic milliseconds supplied by the platform adapter.
+// This file only describes data: what a "location reading" is and which
+// fixed numbers the rules use. It contains no logic.
+//
+// The engine never talks to the GPS, to the clock or to React Native. The
+// platform code (Kotlin on Android, Swift on iOS) hands it readings and the
+// current time, and the engine answers questions about them.
 #ifndef LCE_TYPES_HPP
 #define LCE_TYPES_HPP
 
@@ -11,73 +15,121 @@
 
 namespace lce {
 
-// --- Model constants --------------------------------------------------------
-// Numeric thresholds are initial design hypotheses, not statistical guarantees.
+// --- Fixed numbers used by the rules -----------------------------------------
+// These are starting guesses to be tuned with real data. They are not
+// scientific facts and not guarantees.
 
-inline constexpr std::size_t kHistoryCapacity = 10;
-inline constexpr std::int64_t kHistoryRetentionMs = 120000;
+// The history remembers at most this many location readings.
+inline constexpr std::size_t MAX_STORED_LOCATIONS = 10;
 
-// A fix whose capture time is at most this far ahead of "now" is treated as
-// clock jitter and clamped to age 0. Beyond it the time base is not trusted.
-inline constexpr std::int64_t kFutureTimestampToleranceMs = 1000;
+// A reading older than 2 minutes is forgotten. After that long we cannot say
+// anything useful about where the phone is now.
+inline constexpr std::int64_t MAX_AGE_IN_HISTORY_MS = 120000;
 
-inline constexpr double kMaxRadiusMeters = 100000.0;
+// Sometimes a reading claims to have been taken slightly in the future,
+// because two clocks inside the phone disagree by a few milliseconds.
+// Up to 1 second we treat it as "taken right now". More than that means the
+// clock cannot be trusted and the reading is thrown away.
+inline constexpr std::int64_t CLOCK_JITTER_TOLERANCE_MS = 1000;
 
-inline constexpr const char* kScoreModelVersion = "heuristic-v1";
+// Largest delivery radius the library accepts (100 km).
+inline constexpr double MAX_RADIUS_METERS = 100000.0;
 
-// --- Geometry ---------------------------------------------------------------
+// Name of the current set of scoring rules. If the rules change in a way that
+// changes results, this name must change too.
+inline constexpr const char* SCORE_MODEL_VERSION = "heuristic-v1";
+
+// --- A point on the map --------------------------------------------------------
 
 struct Coordinates {
-  double latitudeDeg = 0.0;   // WGS-84, [-90, 90]
-  double longitudeDeg = 0.0;  // WGS-84, [-180, 180]
+  double latitudeDegrees = 0.0;   // -90 (south pole) to +90 (north pole)
+  double longitudeDegrees = 0.0;  // -180 to +180
 };
 
-// --- Sample metadata --------------------------------------------------------
+// --- Extra information that comes with a reading ---------------------------------
 
-enum class Provider : std::uint8_t { Fused, CoreLocation, SystemCache };
+// Which system service produced the reading.
+enum class Provider : std::uint8_t {
+  Fused,         // Android: Google Play services location
+  CoreLocation,  // iOS
+  SystemCache,   // an old reading the operating system had stored
+};
 
-// What the operating system reported about simulation. NotReported is not a
-// statement that the location is authentic.
-enum class MockFlag : std::uint8_t { Unknown, NotReported, Reported };
+// Did the operating system tell us this location is simulated (a "mock")?
+// Important: "NotFlaggedByOs" does NOT prove the location is real. Some
+// spoofing tools are invisible to the operating system.
+enum class MockSignal : std::uint8_t {
+  Unknown,         // the operating system gave no information
+  NotFlaggedByOs,  // the operating system did not mark it as simulated
+  FlaggedByOs,     // the operating system marked it as simulated
+};
 
-// Which part of the flow obtained the fix. Used to label the result source.
-enum class AcquisitionPhase : std::uint8_t { Monitoring, Initial, Recovery };
+// What the app wants to happen when a reading is flagged as simulated.
+enum class MockPolicy : std::uint8_t {
+  ZeroScore,  // the quality score becomes 0
+  FlagOnly,   // only report it; the score is not changed
+};
 
-enum class FixSource : std::uint8_t { Fresh, Recovered, Cached, Unavailable };
+// At which moment of the flow the reading was obtained.
+enum class AcquisitionPhase : std::uint8_t {
+  Monitoring,      // collected in the background of an open session
+  InitialAttempt,  // the first attempt of an evaluation
+  RecoveryWindow,  // the extra time given when the first attempt was not enough
+};
 
-enum class MockPolicy : std::uint8_t { ZeroScore, FlagOnly };
+// Where the reading used in the final answer came from.
+enum class FixSource : std::uint8_t {
+  Fresh,        // obtained now, in the first attempt
+  Recovered,    // obtained now, during the recovery window
+  Cached,       // taken from the history (an older reading)
+  Unavailable,  // there was no usable reading
+};
 
-// A syntactically valid, normalized location fix. Only measured fixes exist:
-// the core never synthesizes coordinates.
-struct LocationSample {
+// --- One location reading -----------------------------------------------------------
+//
+// A "reading" (also called a "fix") is one answer from the GPS: a position,
+// how precise the phone thinks it is, and when it was taken.
+//
+// Every reading here was really measured by the phone. The engine never
+// invents or predicts a position.
+struct LocationReading {
   Coordinates position;
+
+  // The phone's own estimate of its error: "the real position is probably
+  // within this many meters of `position`". Smaller is better.
   double horizontalAccuracyMeters = 0.0;
 
-  // Capture time on the process-wide monotonic clock of the platform.
-  std::int64_t fixTimeMonotonicMs = 0;
+  // When the reading was taken, in milliseconds on the phone's monotonic
+  // clock. A monotonic clock only moves forward and is not affected when the
+  // user changes the date or time, so it is safe for measuring age.
+  std::int64_t capturedAtMs = 0;
 
-  bool approximatePermission = false;
+  // True when the user only allowed approximate location. The position may
+  // then be off by kilometers, no matter what the accuracy field says.
+  bool onlyApproximatePermission = false;
 
-  // Absent means "not reported", never zero.
-  std::optional<double> speedMps;
-  std::optional<double> speedAccuracyMps;
-  std::optional<double> courseDeg;  // [0, 360)
+  // Optional extras. "Empty" means the phone did not report the value.
+  // Empty is never the same as zero: an unknown speed is not "standing still".
+  std::optional<double> speedMetersPerSecond;
+  std::optional<double> speedAccuracyMetersPerSecond;
+  std::optional<double> headingDegrees;  // direction of travel, 0 up to (not including) 360
 
   Provider provider = Provider::Fused;
-  MockFlag mockFlag = MockFlag::Unknown;
+  MockSignal mockSignal = MockSignal::Unknown;
 
-  // Provenance: request that acquired the fix (0 = none) and in which phase.
-  std::uint32_t acquiredByRequest = 0;
-  AcquisitionPhase phase = AcquisitionPhase::Monitoring;
+  // Which evaluation request obtained this reading (0 = none) and when.
+  std::uint32_t obtainedByRequestId = 0;
+  AcquisitionPhase obtainedDuring = AcquisitionPhase::Monitoring;
 
-  // Assigned by LocationHistory on insertion. Only used as a stable tie-break;
-  // it is not an identity for deduplication.
-  std::uint64_t sequence = 0;
+  // A counter given by the history when the reading is stored: 1, 2, 3...
+  // It only says "this one arrived before that one". Two readings with
+  // different numbers can still be the same reading delivered twice.
+  std::uint64_t arrivalNumber = 0;
 };
 
-// Age of a sample at `nowMonotonicMs`, never negative.
-inline std::int64_t ageMs(const LocationSample& sample, std::int64_t nowMonotonicMs) noexcept {
-  const std::int64_t age = nowMonotonicMs - sample.fixTimeMonotonicMs;
+// How old is this reading right now? Never negative.
+inline std::int64_t ageInMs(const LocationReading& reading, std::int64_t nowMs) noexcept {
+  const std::int64_t age = nowMs - reading.capturedAtMs;
   return age > 0 ? age : 0;
 }
 

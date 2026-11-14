@@ -1,14 +1,23 @@
-// Stable public reason codes. The snake_case names are the single source of
-// truth for both platforms; they never contain coordinates or OS error text.
+// Reason codes: short, fixed labels that explain a result.
+//
+// Example: when there is no GPS permission, the answer carries the reason
+// "permission_denied". Apps can show a message or decide what to do based
+// on these labels, so their text must never change once published.
+//
+// A reason code never contains coordinates or error text from the system.
 #ifndef LCE_REASON_CODES_HPP
 #define LCE_REASON_CODES_HPP
 
+#include <bitset>
 #include <cstddef>
 #include <cstdint>
 
 namespace lce {
 
+// Every reason the engine or the platform code can report.
+// The order here must match the list of names in ReasonCodes.cpp.
 enum class ReasonCode : std::uint8_t {
+  // Permissions and device state
   PermissionNotDetermined = 0,
   PermissionDenied,
   PermissionRestricted,
@@ -22,10 +31,14 @@ enum class ReasonCode : std::uint8_t {
   PlatformUnsupported,
   AppBackgrounded,
   ForegroundRequired,
+
+  // Time limits
   InitialFixTimeout,
   RecoveryWindowTimeout,
   OverallDeadlineReached,
   NativeProviderUnavailable,
+
+  // Problems with a location reading
   LocationAccuracyUnavailable,
   LocationInvalidCoordinates,
   LocationInvalidTimestamp,
@@ -34,6 +47,8 @@ enum class ReasonCode : std::uint8_t {
   LocationAgeUnreliable,
   LocationFutureTimestamp,
   ClockDiscontinuity,
+
+  // Problems with the set of readings
   HistoryEmpty,
   HistoryOnlyInconclusive,
   SamplesDuplicate,
@@ -41,11 +56,14 @@ enum class ReasonCode : std::uint8_t {
   SuspectedGpsJump,
   PossibleMockLocation,
   NoUsableFix,
+
+  // Request lifecycle
   RequestCancelled,
   SessionStopped,
   Busy,
   NativeInternalError,
-  // Added by the Phase 0 spec review (R-12).
+
+  // Added after the spec review (finding R-12)
   UnknownSession,
   LocationInvalidAccuracy,
   LocationMetadataInconsistent,
@@ -53,32 +71,36 @@ enum class ReasonCode : std::uint8_t {
   MotionConflictingEvidence,
   MonitoringDurationReached,
   UncertaintyModelHeuristic,
-  Count
+
+  Count  // not a reason: only tells how many reasons exist
 };
 
-inline constexpr std::size_t kReasonCodeCount = static_cast<std::size_t>(ReasonCode::Count);
+inline constexpr std::size_t REASON_CODE_COUNT = static_cast<std::size_t>(ReasonCode::Count);
 
-// Returns the stable snake_case name, or nullptr for an out-of-range value.
+// The public text of a reason, for example "permission_denied".
+// Returns nullptr if the value is not a real reason.
 const char* reasonCodeName(ReasonCode code) noexcept;
 
-// Small value-type set of reason codes.
+// A small collection of reasons, like a checklist where each reason is
+// either ticked or not. Adding the same reason twice changes nothing.
 class ReasonSet {
  public:
-  void add(ReasonCode code) noexcept { bits_ |= bit(code); }
-  bool contains(ReasonCode code) const noexcept { return (bits_ & bit(code)) != 0; }
-  bool empty() const noexcept { return bits_ == 0; }
-  void merge(const ReasonSet& other) noexcept { bits_ |= other.bits_; }
-  std::uint64_t bits() const noexcept { return bits_; }
+  void add(ReasonCode code) noexcept { ticked_.set(positionOf(code)); }
+
+  bool contains(ReasonCode code) const noexcept { return ticked_.test(positionOf(code)); }
+
+  bool empty() const noexcept { return ticked_.none(); }
+
+  // Ticks here everything that is ticked in `other`.
+  void merge(const ReasonSet& other) noexcept { ticked_ |= other.ticked_; }
 
  private:
-  static std::uint64_t bit(ReasonCode code) noexcept {
-    return std::uint64_t{1} << static_cast<unsigned>(code);
+  static std::size_t positionOf(ReasonCode code) noexcept {
+    return static_cast<std::size_t>(code);
   }
 
-  std::uint64_t bits_ = 0;
+  std::bitset<REASON_CODE_COUNT> ticked_;
 };
-
-static_assert(kReasonCodeCount <= 64, "ReasonSet stores codes in a 64-bit mask");
 
 }  // namespace lce
 

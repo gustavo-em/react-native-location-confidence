@@ -7,48 +7,49 @@
 
 #include "ProximityRelation.hpp"
 #include "QualityScore.hpp"
-#include "SampleValidator.hpp"
+#include "ReadingChecker.hpp"
 #include "Types.hpp"
 
 namespace lce_test {
 
-// A raw fix that passes validation unless a test breaks one field.
-inline lce::RawFix validRawFix(std::int64_t fixTimeMs = 1000) {
-  lce::RawFix raw;
-  raw.latitudeDeg = -20.8117;
-  raw.longitudeDeg = -49.3768;
-  raw.hasAccuracy = true;
-  raw.horizontalAccuracyMeters = 10.0;
-  raw.fixTimeMonotonicMs = fixTimeMs;
-  raw.timeReliable = true;
-  return raw;
+// A reading, not yet checked, that passes the entrance check unless a test
+// breaks one of its fields.
+inline lce::UncheckedReading validUncheckedReading(std::int64_t capturedAtMs = 1000) {
+  lce::UncheckedReading unchecked;
+  unchecked.latitudeDegrees = -20.8117;
+  unchecked.longitudeDegrees = -49.3768;
+  unchecked.hasAccuracy = true;
+  unchecked.horizontalAccuracyMeters = 10.0;
+  unchecked.capturedAtMs = capturedAtMs;
+  unchecked.timeReliable = true;
+  return unchecked;
 }
 
-inline lce::LocationSample sampleAt(std::int64_t fixTimeMs,
-                                    double latitudeDeg = 0.0,
-                                    double longitudeDeg = 0.0,
+inline lce::LocationReading readingAt(std::int64_t capturedAtMs,
+                                    double latitudeDegrees = 0.0,
+                                    double longitudeDegrees = 0.0,
                                     double accuracyMeters = 10.0) {
-  lce::LocationSample sample;
-  sample.position = lce::Coordinates{latitudeDeg, longitudeDeg};
-  sample.horizontalAccuracyMeters = accuracyMeters;
-  sample.fixTimeMonotonicMs = fixTimeMs;
-  return sample;
+  lce::LocationReading reading;
+  reading.position = lce::Coordinates{latitudeDegrees, longitudeDegrees};
+  reading.horizontalAccuracyMeters = accuracyMeters;
+  reading.capturedAtMs = capturedAtMs;
+  return reading;
 }
 
-// Best possible candidate: every factor at 1, no cap applies.
+// The best possible reading: every grade is 1 and no limit applies.
 inline lce::ScoreInput perfectScoreInput() {
   lce::ScoreInput input;
   input.hasCandidate = true;
   input.ageReliable = true;
   input.horizontalAccuracyMeters = 0.0;
   input.ageMs = 0.0;
-  input.movementAllowanceMeters = 0.0;
-  input.movementUnknown = false;
-  input.consistency = lce::Consistency::ThreeOrMoreCoherent;
+  input.possibleMovementMeters = 0.0;
+  input.movementIsUnknown = false;
+  input.consistency = lce::Consistency::ThreeOrMoreAgree;
   input.source = lce::FixSource::Fresh;
-  input.approximatePermission = false;
+  input.onlyApproximatePermission = false;
   input.suspectedJump = false;
-  input.mockFlag = lce::MockFlag::NotReported;
+  input.mockSignal = lce::MockSignal::NotFlaggedByOs;
   input.mockPolicy = lce::MockPolicy::ZeroScore;
   return input;
 }

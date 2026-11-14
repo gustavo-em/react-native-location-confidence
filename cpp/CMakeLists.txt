@@ -17,8 +17,8 @@ add_library(location_confidence_core STATIC
   src/LocationHistory.cpp
   src/ProximityRelation.cpp
   src/QualityScore.cpp
+  src/ReadingChecker.cpp
   src/ReasonCodes.cpp
-  src/SampleValidator.cpp
 )
 
 set_target_properties(location_confidence_core PROPERTIES

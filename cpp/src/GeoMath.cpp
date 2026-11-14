@@ -6,53 +6,79 @@ namespace lce {
 
 namespace {
 
-constexpr double kPi = 3.14159265358979323846;
-constexpr double kDegToRad = kPi / 180.0;
+constexpr double PI = 3.14159265358979323846;
+constexpr double DEGREES_TO_RADIANS = PI / 180.0;
 
-double clampUnit(double value) noexcept {
+// The math functions (sin, cos) expect angles in radians; GPS gives degrees.
+double toRadians(double degrees) noexcept {
+  return degrees * DEGREES_TO_RADIANS;
+}
+
+// Tiny rounding errors can push a value that should be between 0 and 1 a
+// hair outside that range. This brings it back.
+double keepBetweenZeroAndOne(double value) noexcept {
   if (value < 0.0) return 0.0;
   if (value > 1.0) return 1.0;
   return value;
 }
 
-}  // namespace
-
-bool isValidLatitudeDeg(double value) noexcept {
-  return std::isfinite(value) && value >= -90.0 && value <= 90.0;
+// "Normal number" means: not infinity and not NaN (the "not a number" value
+// that broken calculations produce).
+bool isNormalNumber(double value) noexcept {
+  return std::isfinite(value);
 }
 
-bool isValidLongitudeDeg(double value) noexcept {
-  return std::isfinite(value) && value >= -180.0 && value <= 180.0;
+}  // namespace
+
+bool isValidLatitude(double latitudeDegrees) noexcept {
+  return isNormalNumber(latitudeDegrees) && latitudeDegrees >= -90.0 && latitudeDegrees <= 90.0;
+}
+
+bool isValidLongitude(double longitudeDegrees) noexcept {
+  return isNormalNumber(longitudeDegrees) && longitudeDegrees >= -180.0 &&
+         longitudeDegrees <= 180.0;
 }
 
 bool isValidCoordinates(const Coordinates& coordinates) noexcept {
-  return isValidLatitudeDeg(coordinates.latitudeDeg) &&
-         isValidLongitudeDeg(coordinates.longitudeDeg);
+  return isValidLatitude(coordinates.latitudeDegrees) &&
+         isValidLongitude(coordinates.longitudeDegrees);
 }
 
 Coordinates normalizeCoordinates(const Coordinates& coordinates) noexcept {
-  // Under IEEE-754 round-to-nearest, (-0.0) + 0.0 is +0.0.
-  return Coordinates{coordinates.latitudeDeg + 0.0, coordinates.longitudeDeg + 0.0};
+  // Adding 0.0 to -0.0 gives +0.0, and does not change any other number.
+  return Coordinates{coordinates.latitudeDegrees + 0.0, coordinates.longitudeDegrees + 0.0};
 }
 
-double haversineMeters(const Coordinates& a, const Coordinates& b) noexcept {
-  const double phi1 = a.latitudeDeg * kDegToRad;
-  const double phi2 = b.latitudeDeg * kDegToRad;
-  const double deltaPhi = (b.latitudeDeg - a.latitudeDeg) * kDegToRad;
+double distanceBetweenMeters(const Coordinates& from, const Coordinates& to) noexcept {
+  const double fromLatitude = toRadians(from.latitudeDegrees);
+  const double toLatitude = toRadians(to.latitudeDegrees);
+  const double latitudeDifference = toRadians(to.latitudeDegrees - from.latitudeDegrees);
 
-  // Wrap the longitude difference into [-180, 180] so that +180 and -180 are
-  // the same meridian and a short hop across the antimeridian stays short.
-  const double deltaLambdaDeg = std::remainder(b.longitudeDeg - a.longitudeDeg, 360.0);
-  const double deltaLambda = deltaLambdaDeg * kDegToRad;
+  // Longitude wraps around the planet: +180 and -180 are the same line.
+  // Going from longitude 179.999 to -179.999 is a short hop of 0.002 degrees,
+  // not a trip of 359.998 degrees around the world. `remainder` picks the
+  // short way.
+  const double longitudeDifferenceDegrees =
+      std::remainder(to.longitudeDegrees - from.longitudeDegrees, 360.0);
+  const double longitudeDifference = toRadians(longitudeDifferenceDegrees);
 
-  const double sinHalfPhi = std::sin(deltaPhi / 2.0);
-  const double sinHalfLambda = std::sin(deltaLambda / 2.0);
+  // The "haversine" formula, the standard way to measure distance on a
+  // sphere. It produces a number from 0 (same point) to 1 (opposite sides of
+  // the planet).
+  const double sineOfHalfLatitudeDifference = std::sin(latitudeDifference / 2.0);
+  const double sineOfHalfLongitudeDifference = std::sin(longitudeDifference / 2.0);
 
-  const double h = clampUnit(sinHalfPhi * sinHalfPhi +
-                             std::cos(phi1) * std::cos(phi2) * sinHalfLambda * sinHalfLambda);
+  const double haversine = keepBetweenZeroAndOne(
+      sineOfHalfLatitudeDifference * sineOfHalfLatitudeDifference +
+      std::cos(fromLatitude) * std::cos(toLatitude) * sineOfHalfLongitudeDifference *
+          sineOfHalfLongitudeDifference);
 
-  const double centralAngle = 2.0 * std::atan2(std::sqrt(h), std::sqrt(1.0 - h));
-  return kEarthMeanRadiusMeters * centralAngle;
+  // Turn that number into the angle between the two points as seen from the
+  // center of the Earth, then into meters along the surface.
+  const double angleBetweenPoints =
+      2.0 * std::atan2(std::sqrt(haversine), std::sqrt(1.0 - haversine));
+
+  return EARTH_RADIUS_METERS * angleBetweenPoints;
 }
 
 }  // namespace lce

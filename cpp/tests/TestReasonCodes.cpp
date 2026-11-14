@@ -24,7 +24,7 @@ bool isSnakeCase(const char* name) {
 
 TEST_CASE("reason codes: every code has a unique snake_case name") {
   std::set<std::string> seen;
-  for (std::size_t i = 0; i < kReasonCodeCount; ++i) {
+  for (std::size_t i = 0; i < REASON_CODE_COUNT; ++i) {
     const char* name = reasonCodeName(static_cast<ReasonCode>(i));
     REQUIRE(name != nullptr);
     CHECK(isSnakeCase(name));
@@ -61,12 +61,12 @@ TEST_CASE("reason set: add, contains and merge") {
 
 TEST_CASE("score caps: every cap has a unique snake_case name") {
   std::set<std::string> seen;
-  for (std::size_t i = 0; i < static_cast<std::size_t>(ScoreCap::Count); ++i) {
-    const char* name = scoreCapName(static_cast<ScoreCap>(i));
+  for (std::size_t i = 0; i < static_cast<std::size_t>(ScoreLimit::Count); ++i) {
+    const char* name = scoreLimitName(static_cast<ScoreLimit>(i));
     REQUIRE(name != nullptr);
     CHECK(isSnakeCase(name));
     CHECK(seen.insert(name).second);
   }
-  CHECK(std::strcmp(scoreCapName(ScoreCap::SingleFix), "single_fix") == 0);
-  CHECK(scoreCapName(ScoreCap::Count) == nullptr);
+  CHECK(std::strcmp(scoreLimitName(ScoreLimit::SingleFix), "single_fix") == 0);
+  CHECK(scoreLimitName(ScoreLimit::Count) == nullptr);
 }
