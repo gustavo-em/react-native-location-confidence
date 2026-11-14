@@ -21,7 +21,7 @@ Achados e hipóteses que mudam ou completam a SPEC estão em `SPEC_REVIEW.md`, P
 
 ## Arquivos
 
-Criados em `cpp/src/`: `Types.hpp`, `ReasonCodes.hpp/.cpp`, `GeoMath.hpp/.cpp`, `SampleValidator.hpp/.cpp`, `LocationHistory.hpp/.cpp`, `ProximityRelation.hpp/.cpp`, `QualityScore.hpp/.cpp` (1059 linhas com `CFacade.cpp`).
+Criados em `cpp/src/`: `Types.hpp`, `ReasonCodes.hpp/.cpp`, `GeoMath.hpp/.cpp`, `ReadingChecker.hpp/.cpp` (criado como `SampleValidator`, renomeado depois), `LocationHistory.hpp/.cpp`, `ProximityRelation.hpp/.cpp`, `QualityScore.hpp/.cpp`.
 
 Criados em `cpp/tests/`: `TestMain.cpp`, `TestSupport.hpp`, `TestFacade.cpp`, `TestGeoMath.cpp`, `TestRelation.cpp`, `TestValidation.cpp`, `TestHistory.cpp`, `TestScore.cpp`, `TestProperties.cpp`, `TestReasonCodes.cpp`, `third_party/doctest.h`, `third_party/README.md`.
 
@@ -82,3 +82,11 @@ Verificação da força dos testes: apliquei 8 mutações isoladas ao core em c�
 ## Próximo gate
 
 Fase 2 (detector de outliers, evidência de motion, modelo de incerteza com envelope de velocidade, seletor de candidato, propriedades). Requer aprovação explícita.
+
+## Atualização — passada de legibilidade
+
+A pedido do owner, todos os arquivos do core, a fachada e o `JniBindings.cpp` foram reescritos para leitura por quem está aprendendo C++: nomes em inglês por extenso, condições nomeadas antes do `if`, funções pequenas e comentários que explicam a regra de negócio com exemplos numéricos. Nenhum comportamento mudou.
+
+Principais renomeações: `LocationSample` → `LocationReading`; `RawFix` → `UncheckedReading`; `validateSample` → `checkReading` (arquivo `ReadingChecker`); `haversineMeters` → `distanceBetweenMeters`; `evaluateQualityScore` → `calculateQualityScore`; `ScoreCap` → `ScoreLimit`; `LocationHistory::insert` → `store`; constantes em `MAIUSCULAS_COM_SUBLINHADO`. As máscaras de bits manuais deram lugar a `std::bitset` e `std::array<bool>`.
+
+Verificação após a reescrita: 110 casos passam em C++17, C++20 e com sanitizers; as mesmas 8 mutações são detectadas, com as mesmas contagens de falha de antes. Os nomes públicos (reason codes, nomes de caps) não mudaram.

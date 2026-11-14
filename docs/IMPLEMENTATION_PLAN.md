@@ -13,7 +13,7 @@ src/
   __tests__/
 cpp/
   include/location_confidence/       # lce.h (C) + headers C++ internos
-  src/                               # GeoMath, SampleValidator, LocationHistory, OutlierDetector,
+  src/                               # GeoMath, ReadingChecker, LocationHistory, OutlierDetector,
                                      # MotionEvidenceAnalyzer, UncertaintyModel, CandidateSelector,
                                      # QualityScore, RecoveryPolicy, LocationEngine, CFacade
   tests/                             # host: unit, propriedades, fachada; fixtures/*.json
