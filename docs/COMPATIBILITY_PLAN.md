@@ -64,7 +64,7 @@ Faixa de `peerDependencies` só será ampliada (ex.: 0.86, 0.87) se o CI compila
 
 ## 6. Bloqueadores de compilação e permissão identificados
 
-**Atualização após a Fase 0.5:** B1, B2, B3, B4 e B5 resolvidos (Node 24.22.3 via nvm, NDK 27.1.12297006 instalado, repositório git criado pelo scaffold, nome `react-native-location-confidence`, pod misto provado em release nas duas configurações). B6, B7 e B8 seguem abertos. Evidência em `PHASE_0_5_REPORT.md`.
+**Atualização após a Fase 0.5:** B1, B2, B3, B4 e B5 resolvidos (Node 24.22.3 via nvm, NDK 27.1.12297006 instalado, repositório git criado pelo scaffold, nome `react-native-location-confidence`, pod misto provado em release nas duas configurações). B6, B7 e B8 seguem abertos (B8 em parte: há emulador Android e simulador iOS; faltam aparelhos físicos). Evidência em `PHASE_0_5_REPORT.md`.
 
 | # | Bloqueador | Ação |
 |---|---|---|

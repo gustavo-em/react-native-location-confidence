@@ -75,7 +75,7 @@ Verificação da força dos testes: apliquei 8 mutações isoladas ao core em c�
 
 - Os testes rodaram só em host (macOS arm64, Apple clang 17). No Android e no iOS o core foi compilado, não executado; a execução das fixtures nas plataformas vem com a fachada C (Fase 3) e os adapters (Fases 4–5).
 - Fixtures em JSON ainda não existem: os casos estão escritos em C++. O plano previa JSON como fonte única; proponho introduzi-lo na Fase 3, quando houver a fachada por onde as três plataformas as executam.
-- Execução no Android segue não verificada (sem emulador nem aparelho).
+- Execução no Android: verificada depois em emulador arm64 com o APK release desta branch (ver `PHASE_0_5_REPORT.md`). Só a função de versão de ABI atravessa a ponte; os módulos da Fase 1 ainda não são chamados pelas plataformas.
 - Limiares do score, tolerância de timestamp e demais números continuam sendo hipóteses não calibradas.
 - R-24 altera a tabela de caps da SPEC e aguarda sua ciência.
 

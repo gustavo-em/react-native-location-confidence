@@ -70,9 +70,19 @@ Como previsto, o tipo de retorno não é verificado no lado nativo em nenhuma pl
 | R8 preserva a ponte JNI com `RegisterNatives` + regra de keep? | Preserva nomes; execução no Android não foi verificada |
 | Scaffold precisa de patch no app consumidor? | Não. Alterações ficaram no pacote; no exemplo só liguei o R8 |
 
+## Atualização — execução no Android verificada
+
+Feita depois, com o APK release da branch `phase/1-core-base` (R8 ligado, core da Fase 1 compilado), em emulador `Medium_Phone` (arm64-v8a, Android 17 / API 37):
+
+- `adb install` do APK release: sucesso.
+- App aberto: a tela mostrou `abiVersion: 1`, `platform: "android"` e o eco completo, igual ao iOS.
+- `logcat`: `nativeloader` carregou `lib/arm64-v8a/liblocation-confidence.so`; nenhuma ocorrência de `UnsatisfiedLinkError`, `No implementation found`, `dlopen failed` ou `FATAL`.
+
+Isso prova em runtime `System.loadLibrary`, `JNI_OnLoad`, `RegisterNatives` e a preservação do nome da classe pelo R8. Limites: o emulador usa páginas de 4 KB, então o alinhamento de 16 KB foi conferido só no binário; a ABI `x86_64` foi compilada e não executada; nenhum aparelho físico.
+
 ## Não feito ou não verificado
 
-- **Execução no Android.** Não há AVD nem dispositivo Android conectado. O caminho JS → Kotlin → JNI → C foi compilado, linkado e inspecionado, mas não executado. `JNI_OnLoad` e `System.loadLibrary` só serão provados em runtime.
+- ~~Execução no Android.~~ Resolvido; ver a seção acima.
 - **Medição de latência one-shot contra stream** (condição da ADR-015). Exige código de localização e dispositivo; fica para o início das Fases 4/5. ADR-015 segue condicional.
 - **Build para iPhone físico** e ABIs `armeabi-v7a`/`x86`. Só simulador arm64 e as duas ABIs Android listadas.
 - **CI.** O workflow do template existe e não foi tocado; não há job de C++ em host. Nada foi enviado a remoto.
