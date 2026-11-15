@@ -70,3 +70,28 @@ Parcial: MOT-002 (o limite de 0,5 m/s para "parado" está feito; a exigência de
 - Android e iOS não foram recompilados com o arquivo novo; fica para o fim da Fase 2. O arquivo é C++ puro e compila em C++17 e C++20 no host.
 - A integração por trechos ("parado 2 s, desconhecido 18 s") depende do passo 2c.
 - Nada chama o modelo ainda fora dos testes; o seletor (2d) será o primeiro a usá-lo.
+
+### Atualização — nomes e estrutura simplificados (15/11/2026)
+
+A pedido do owner, o módulo foi refatorado para leitura mais fácil, sem mudar resultados.
+
+| Antes | Agora |
+|---|---|
+| `estimatePossibleMovement` | `calculateDistancePhoneCouldHaveMoved` |
+| `totalUncertaintyMeters` | `calculateHowFarPhoneCouldBeFromReading` |
+| `topSpeedFor` | `speedForPhoneActivity` |
+| `distanceFromReportedSpeed` | `calculateDistanceUsingSpeedReportedByGps` |
+| `usableFastestSpeed` | `replaceInvalidSpeedWithDefault` |
+| `smallerOf` | removida; virou um `if` no fim da função principal |
+| `MovementKind` | `PhoneActivity` (`StandingStill`, `InVehicle`, ...) |
+| `MovementEstimate` / `possibleMovementMeters` / `basis` | `DistancePhoneCouldHaveMoved` / `meters` / `howItWasCalculated` |
+| `MovementEstimateBasis` | `HowDistanceWasCalculated` |
+| `movementIsUnknown()` | `weOnlyAssumedTheWorst()` |
+| `ageOfReadingMs` | `millisecondsSinceReading` |
+
+Estrutura: a função principal passou de três blocos com `return` no meio para um único `if / else if / else`, com o limite ("nunca mais que a maior distância possível") aplicado uma vez no fim.
+
+Verificação: 128 casos em C++17, C++20 e com sanitizers; 7 mutações detectadas, cada uma com recompilação forçada do arquivo alterado e da biblioteca (uma primeira rodada em lote reaproveitou um binário antigo e foi descartada). Um teste novo fixa a ordem das opções (atividade conhecida vem antes da velocidade do GPS), que antes não era coberta: a mutação que trocava a ordem passava despercebida.
+
+Também existe `cpp/src/UncertaintyModel.study.ts`, espelho de estudo em TypeScript pedido pelo owner. Não faz parte da biblioteca (fora do build e do pacote npm) e foi comparado com o C++ em 20.000 entradas geradas, sem diferenças.
+
