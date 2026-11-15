@@ -27,65 +27,65 @@ LocationReading readingWithoutSpeed(double accuracyMeters = 10.0) {
 
 // Builds the score input for a reading, using the model's estimate.
 ScoreInput scoreInputFor(const LocationReading& reading,
-                         std::int64_t ageOfReadingMs,
-                         const MovementEstimate& movement) {
+                         std::int64_t millisecondsSinceReading,
+                         const DistancePhoneCouldHaveMoved& movement) {
   ScoreInput input = perfectScoreInput();
   input.horizontalAccuracyMeters = reading.horizontalAccuracyMeters;
-  input.ageMs = static_cast<double>(ageOfReadingMs);
-  input.possibleMovementMeters = movement.possibleMovementMeters;
-  input.movementIsUnknown = movement.movementIsUnknown();
+  input.ageMs = static_cast<double>(millisecondsSinceReading);
+  input.possibleMovementMeters = movement.meters;
+  input.movementIsUnknown = movement.weOnlyAssumedTheWorst();
   return input;
 }
 
 }  // namespace
 
 TEST_CASE("MOT-002 stationary for 30 seconds allows a small drift (model part)") {
-  const MovementEstimate estimate =
-      estimatePossibleMovement(readingWithoutSpeed(), 30000, MovementKind::Stationary);
-  CHECK(estimate.possibleMovementMeters == doctest::Approx(15.0));  // 0.5 m/s x 30 s
-  CHECK(estimate.basis == MovementEstimateBasis::KnownActivity);
-  CHECK_FALSE(estimate.movementIsUnknown());
+  const DistancePhoneCouldHaveMoved estimate =
+      calculateDistancePhoneCouldHaveMoved(readingWithoutSpeed(), 30000, PhoneActivity::StandingStill);
+  CHECK(estimate.meters == doctest::Approx(15.0));  // 0.5 m/s x 30 s
+  CHECK(estimate.howItWasCalculated == HowDistanceWasCalculated::FromPhoneActivity);
+  CHECK_FALSE(estimate.weOnlyAssumedTheWorst());
 }
 
 TEST_CASE("MOT-005 vehicle for 10 seconds") {
-  const MovementEstimate estimate =
-      estimatePossibleMovement(readingWithoutSpeed(), 10000, MovementKind::Vehicle);
-  CHECK(estimate.possibleMovementMeters == doctest::Approx(450.0));  // 45 m/s x 10 s
+  const DistancePhoneCouldHaveMoved estimate =
+      calculateDistancePhoneCouldHaveMoved(readingWithoutSpeed(), 10000, PhoneActivity::InVehicle);
+  CHECK(estimate.meters == doctest::Approx(450.0));  // 45 m/s x 10 s
 }
 
 TEST_CASE("MOT-006 walking for 5 seconds") {
-  const MovementEstimate estimate =
-      estimatePossibleMovement(readingWithoutSpeed(), 5000, MovementKind::Walking);
-  CHECK(estimate.possibleMovementMeters == doctest::Approx(15.0));  // 3 m/s x 5 s
+  const DistancePhoneCouldHaveMoved estimate =
+      calculateDistancePhoneCouldHaveMoved(readingWithoutSpeed(), 5000, PhoneActivity::Walking);
+  CHECK(estimate.meters == doctest::Approx(15.0));  // 3 m/s x 5 s
 }
 
 TEST_CASE("MOT-007 running for 5 seconds") {
-  const MovementEstimate estimate =
-      estimatePossibleMovement(readingWithoutSpeed(), 5000, MovementKind::Running);
-  CHECK(estimate.possibleMovementMeters == doctest::Approx(40.0));  // 8 m/s x 5 s
+  const DistancePhoneCouldHaveMoved estimate =
+      calculateDistancePhoneCouldHaveMoved(readingWithoutSpeed(), 5000, PhoneActivity::Running);
+  CHECK(estimate.meters == doctest::Approx(40.0));  // 8 m/s x 5 s
 }
 
 TEST_CASE("MOT-008 cycling for 5 seconds") {
-  const MovementEstimate estimate =
-      estimatePossibleMovement(readingWithoutSpeed(), 5000, MovementKind::Cycling);
-  CHECK(estimate.possibleMovementMeters == doctest::Approx(60.0));  // 12 m/s x 5 s
+  const DistancePhoneCouldHaveMoved estimate =
+      calculateDistancePhoneCouldHaveMoved(readingWithoutSpeed(), 5000, PhoneActivity::Cycling);
+  CHECK(estimate.meters == doctest::Approx(60.0));  // 12 m/s x 5 s
 }
 
 TEST_CASE("MOT-009 nothing known for 5 seconds uses the worst case") {
-  const MovementEstimate estimate =
-      estimatePossibleMovement(readingWithoutSpeed(), 5000, MovementKind::Unknown);
-  CHECK(estimate.possibleMovementMeters == doctest::Approx(225.0));  // 45 m/s x 5 s
-  CHECK(estimate.basis == MovementEstimateBasis::WorstCase);
-  CHECK(estimate.movementIsUnknown());
+  const DistancePhoneCouldHaveMoved estimate =
+      calculateDistancePhoneCouldHaveMoved(readingWithoutSpeed(), 5000, PhoneActivity::Unknown);
+  CHECK(estimate.meters == doctest::Approx(225.0));  // 45 m/s x 5 s
+  CHECK(estimate.howItWasCalculated == HowDistanceWasCalculated::AssumingFastestPossibleSpeed);
+  CHECK(estimate.weOnlyAssumedTheWorst());
 }
 
 TEST_CASE("MOT-016 knowing the phone is stationary does not make an imprecise reading precise") {
   const LocationReading imprecise = readingWithoutSpeed(1000.0);
-  const MovementEstimate estimate =
-      estimatePossibleMovement(imprecise, 2000, MovementKind::Stationary);
+  const DistancePhoneCouldHaveMoved estimate =
+      calculateDistancePhoneCouldHaveMoved(imprecise, 2000, PhoneActivity::StandingStill);
 
   // The reading's own 1000 m error is still there.
-  CHECK(totalUncertaintyMeters(imprecise, estimate) == doctest::Approx(1001.0));
+  CHECK(calculateHowFarPhoneCouldBeFromReading(imprecise, estimate) == doctest::Approx(1001.0));
 
   const ScoreResult score = calculateQualityScore(scoreInputFor(imprecise, 2000, estimate));
   CHECK(score.wasLimitedBy(ScoreLimit::UncertaintyAtLeast300));
@@ -97,25 +97,25 @@ TEST_CASE("MOT-026 the speed reported by the GPS narrows the estimate") {
   const LocationReading almostStill = readingWithSpeed(0.3, 0.5);
 
   SUBCASE("3 seconds old") {
-    const MovementEstimate estimate =
-        estimatePossibleMovement(almostStill, 3000, MovementKind::Unknown);
+    const DistancePhoneCouldHaveMoved estimate =
+        calculateDistancePhoneCouldHaveMoved(almostStill, 3000, PhoneActivity::Unknown);
     // 1.3 x 3 + 2.5 x 3 x 3 / 2 = 3.9 + 11.25
-    CHECK(estimate.possibleMovementMeters == doctest::Approx(15.15));
-    CHECK(estimate.basis == MovementEstimateBasis::SpeedReportedByGps);
-    CHECK_FALSE(estimate.movementIsUnknown());
+    CHECK(estimate.meters == doctest::Approx(15.15));
+    CHECK(estimate.howItWasCalculated == HowDistanceWasCalculated::FromSpeedReportedByGps);
+    CHECK_FALSE(estimate.weOnlyAssumedTheWorst());
   }
   SUBCASE("10 seconds old") {
-    const MovementEstimate estimate =
-        estimatePossibleMovement(almostStill, 10000, MovementKind::Unknown);
+    const DistancePhoneCouldHaveMoved estimate =
+        calculateDistancePhoneCouldHaveMoved(almostStill, 10000, PhoneActivity::Unknown);
     // 1.3 x 10 + 2.5 x 10 x 10 / 2 = 13 + 125
-    CHECK(estimate.possibleMovementMeters == doctest::Approx(138.0));
+    CHECK(estimate.meters == doctest::Approx(138.0));
   }
   SUBCASE("it is far below the worst case") {
     const double withSpeed =
-        estimatePossibleMovement(almostStill, 3000, MovementKind::Unknown).possibleMovementMeters;
+        calculateDistancePhoneCouldHaveMoved(almostStill, 3000, PhoneActivity::Unknown).meters;
     const double worstCase =
-        estimatePossibleMovement(readingWithoutSpeed(), 3000, MovementKind::Unknown)
-            .possibleMovementMeters;
+        calculateDistancePhoneCouldHaveMoved(readingWithoutSpeed(), 3000, PhoneActivity::Unknown)
+            .meters;
     CHECK(worstCase == doctest::Approx(135.0));
     CHECK(withSpeed < worstCase);
   }
@@ -125,16 +125,16 @@ TEST_CASE("MOT-027 a speed without its error is not trusted") {
   LocationReading speedOnly = readingWithoutSpeed();
   speedOnly.speedMetersPerSecond = 0.0;  // "standing still", but no error estimate
 
-  const MovementEstimate estimate =
-      estimatePossibleMovement(speedOnly, 3000, MovementKind::Unknown);
-  CHECK(estimate.possibleMovementMeters == doctest::Approx(135.0));
-  CHECK(estimate.basis == MovementEstimateBasis::WorstCase);
+  const DistancePhoneCouldHaveMoved estimate =
+      calculateDistancePhoneCouldHaveMoved(speedOnly, 3000, PhoneActivity::Unknown);
+  CHECK(estimate.meters == doctest::Approx(135.0));
+  CHECK(estimate.howItWasCalculated == HowDistanceWasCalculated::AssumingFastestPossibleSpeed);
 
   SUBCASE("an error without a speed is not enough either") {
     LocationReading errorOnly = readingWithoutSpeed();
     errorOnly.speedAccuracyMetersPerSecond = 0.5;
-    CHECK(estimatePossibleMovement(errorOnly, 3000, MovementKind::Unknown).basis ==
-          MovementEstimateBasis::WorstCase);
+    CHECK(calculateDistancePhoneCouldHaveMoved(errorOnly, 3000, PhoneActivity::Unknown).howItWasCalculated ==
+          HowDistanceWasCalculated::AssumingFastestPossibleSpeed);
   }
 }
 
@@ -142,9 +142,9 @@ TEST_CASE("MOT-028 the estimate from reported speed never exceeds the worst case
   // Reported 40 m/s with 5 m/s error, 10 seconds: 50 x 10 + 125 = 625 m,
   // but nothing is allowed to travel farther than 45 x 10 = 450 m.
   const LocationReading fast = readingWithSpeed(40.0, 5.0);
-  const MovementEstimate estimate = estimatePossibleMovement(fast, 10000, MovementKind::Unknown);
-  CHECK(estimate.possibleMovementMeters == doctest::Approx(450.0));
-  CHECK(estimate.basis == MovementEstimateBasis::SpeedReportedByGps);
+  const DistancePhoneCouldHaveMoved estimate = calculateDistancePhoneCouldHaveMoved(fast, 10000, PhoneActivity::Unknown);
+  CHECK(estimate.meters == doctest::Approx(450.0));
+  CHECK(estimate.howItWasCalculated == HowDistanceWasCalculated::FromSpeedReportedByGps);
 }
 
 TEST_CASE("MOT-029 the estimate never shrinks as the reading gets older") {
@@ -154,13 +154,13 @@ TEST_CASE("MOT-029 the estimate never shrinks as the reading gets older") {
     const LocationReading reading =
         hasSpeed ? readingWithSpeed(rng.uniform(0.0, 50.0), rng.uniform(0.0, 5.0))
                  : readingWithoutSpeed();
-    const MovementKind kind = static_cast<MovementKind>(rng.below(6));
+    const PhoneActivity kind = static_cast<PhoneActivity>(rng.below(6));
 
     const std::int64_t age = static_cast<std::int64_t>(rng.below(60000));
     const std::int64_t olderAge = age + static_cast<std::int64_t>(rng.below(60000));
 
-    const double now = estimatePossibleMovement(reading, age, kind).possibleMovementMeters;
-    const double later = estimatePossibleMovement(reading, olderAge, kind).possibleMovementMeters;
+    const double now = calculateDistancePhoneCouldHaveMoved(reading, age, kind).meters;
+    const double later = calculateDistancePhoneCouldHaveMoved(reading, olderAge, kind).meters;
 
     REQUIRE(now >= 0.0);
     REQUIRE(later >= now);
@@ -178,12 +178,12 @@ TEST_CASE("MOT-030 losing the reported speed never lowers the estimate nor raise
     const LocationReading withoutSpeed = readingWithoutSpeed(accuracy);
     const std::int64_t age = static_cast<std::int64_t>(rng.below(30000));
 
-    const MovementEstimate informed =
-        estimatePossibleMovement(withSpeed, age, MovementKind::Unknown);
-    const MovementEstimate uninformed =
-        estimatePossibleMovement(withoutSpeed, age, MovementKind::Unknown);
+    const DistancePhoneCouldHaveMoved informed =
+        calculateDistancePhoneCouldHaveMoved(withSpeed, age, PhoneActivity::Unknown);
+    const DistancePhoneCouldHaveMoved uninformed =
+        calculateDistancePhoneCouldHaveMoved(withoutSpeed, age, PhoneActivity::Unknown);
 
-    REQUIRE(uninformed.possibleMovementMeters >= informed.possibleMovementMeters);
+    REQUIRE(uninformed.meters >= informed.meters);
 
     const int informedScore =
         calculateQualityScore(scoreInputFor(withSpeed, age, informed)).qualityScore;
@@ -199,9 +199,9 @@ TEST_CASE("SCR-008 replacing 'stationary' with 'unknown' never raises the score"
     const LocationReading reading = readingWithoutSpeed(rng.uniform(0.0, 60.0));
     const std::int64_t age = static_cast<std::int64_t>(rng.below(30000));
 
-    const MovementEstimate stationary =
-        estimatePossibleMovement(reading, age, MovementKind::Stationary);
-    const MovementEstimate unknown = estimatePossibleMovement(reading, age, MovementKind::Unknown);
+    const DistancePhoneCouldHaveMoved stationary =
+        calculateDistancePhoneCouldHaveMoved(reading, age, PhoneActivity::StandingStill);
+    const DistancePhoneCouldHaveMoved unknown = calculateDistancePhoneCouldHaveMoved(reading, age, PhoneActivity::Unknown);
 
     const int stationaryScore =
         calculateQualityScore(scoreInputFor(reading, age, stationary)).qualityScore;
@@ -214,53 +214,63 @@ TEST_CASE("SCR-008 replacing 'stationary' with 'unknown' never raises the score"
 TEST_CASE("SCR-028 an older reading never has a smaller total uncertainty") {
   const LocationReading reading = readingWithoutSpeed(10.0);
 
-  const double atOneSecond = totalUncertaintyMeters(
-      reading, estimatePossibleMovement(reading, 1000, MovementKind::Walking));
-  const double atTwentySeconds = totalUncertaintyMeters(
-      reading, estimatePossibleMovement(reading, 20000, MovementKind::Walking));
+  const double atOneSecond = calculateHowFarPhoneCouldBeFromReading(
+      reading, calculateDistancePhoneCouldHaveMoved(reading, 1000, PhoneActivity::Walking));
+  const double atTwentySeconds = calculateHowFarPhoneCouldBeFromReading(
+      reading, calculateDistancePhoneCouldHaveMoved(reading, 20000, PhoneActivity::Walking));
 
   CHECK(atOneSecond == doctest::Approx(13.0));      // 10 m + 3 m
   CHECK(atTwentySeconds == doctest::Approx(70.0));  // 10 m + 60 m
   CHECK(atTwentySeconds >= atOneSecond);
 }
 
+TEST_CASE("uncertainty: a known phone activity is used even when the GPS reported a speed") {
+  // Option 1 comes before option 2: walking 3 m/s x 3 s = 9 m,
+  // not the 15.15 m that the GPS speed would give.
+  const LocationReading almostStopped = readingWithSpeed(0.3, 0.5);
+  const DistancePhoneCouldHaveMoved moved =
+      calculateDistancePhoneCouldHaveMoved(almostStopped, 3000, PhoneActivity::Walking);
+  CHECK(moved.meters == doctest::Approx(9.0));
+  CHECK(moved.howItWasCalculated == HowDistanceWasCalculated::FromPhoneActivity);
+}
+
 TEST_CASE("uncertainty: a reading taken right now could not have moved") {
-  CHECK(estimatePossibleMovement(readingWithoutSpeed(), 0, MovementKind::Unknown)
-            .possibleMovementMeters == 0.0);
-  CHECK(estimatePossibleMovement(readingWithSpeed(10.0, 1.0), 0, MovementKind::Unknown)
-            .possibleMovementMeters == 0.0);
+  CHECK(calculateDistancePhoneCouldHaveMoved(readingWithoutSpeed(), 0, PhoneActivity::Unknown)
+            .meters == 0.0);
+  CHECK(calculateDistancePhoneCouldHaveMoved(readingWithSpeed(10.0, 1.0), 0, PhoneActivity::Unknown)
+            .meters == 0.0);
 
   // A negative age makes no sense and is treated as zero.
-  CHECK(estimatePossibleMovement(readingWithoutSpeed(), -5000, MovementKind::Vehicle)
-            .possibleMovementMeters == 0.0);
+  CHECK(calculateDistancePhoneCouldHaveMoved(readingWithoutSpeed(), -5000, PhoneActivity::InVehicle)
+            .meters == 0.0);
 }
 
 TEST_CASE("uncertainty: the app can change the fastest plausible speed") {
   // Couriers on foot only: nothing faster than 5 m/s.
   SUBCASE("it changes the worst case and the vehicle speed") {
-    CHECK(estimatePossibleMovement(readingWithoutSpeed(), 10000, MovementKind::Unknown, 5.0)
-              .possibleMovementMeters == doctest::Approx(50.0));
-    CHECK(estimatePossibleMovement(readingWithoutSpeed(), 10000, MovementKind::Vehicle, 5.0)
-              .possibleMovementMeters == doctest::Approx(50.0));
+    CHECK(calculateDistancePhoneCouldHaveMoved(readingWithoutSpeed(), 10000, PhoneActivity::Unknown, 5.0)
+              .meters == doctest::Approx(50.0));
+    CHECK(calculateDistancePhoneCouldHaveMoved(readingWithoutSpeed(), 10000, PhoneActivity::InVehicle, 5.0)
+              .meters == doctest::Approx(50.0));
   }
   SUBCASE("a known activity is also held to that ceiling") {
     // Cycling would allow 120 m, but the ceiling is 5 m/s x 10 s.
-    CHECK(estimatePossibleMovement(readingWithoutSpeed(), 10000, MovementKind::Cycling, 5.0)
-              .possibleMovementMeters == doctest::Approx(50.0));
+    CHECK(calculateDistancePhoneCouldHaveMoved(readingWithoutSpeed(), 10000, PhoneActivity::Cycling, 5.0)
+              .meters == doctest::Approx(50.0));
   }
   SUBCASE("an invalid setting falls back to the default") {
-    CHECK(estimatePossibleMovement(readingWithoutSpeed(), 10000, MovementKind::Unknown, -1.0)
-              .possibleMovementMeters == doctest::Approx(450.0));
-    CHECK(estimatePossibleMovement(readingWithoutSpeed(), 10000, MovementKind::Unknown, 0.0)
-              .possibleMovementMeters == doctest::Approx(450.0));
+    CHECK(calculateDistancePhoneCouldHaveMoved(readingWithoutSpeed(), 10000, PhoneActivity::Unknown, -1.0)
+              .meters == doctest::Approx(450.0));
+    CHECK(calculateDistancePhoneCouldHaveMoved(readingWithoutSpeed(), 10000, PhoneActivity::Unknown, 0.0)
+              .meters == doctest::Approx(450.0));
   }
 }
 
 TEST_CASE("uncertainty: top speed per activity") {
-  CHECK(topSpeedFor(MovementKind::Stationary, 45.0) == 0.5);
-  CHECK(topSpeedFor(MovementKind::Walking, 45.0) == 3.0);
-  CHECK(topSpeedFor(MovementKind::Running, 45.0) == 8.0);
-  CHECK(topSpeedFor(MovementKind::Cycling, 45.0) == 12.0);
-  CHECK(topSpeedFor(MovementKind::Vehicle, 45.0) == 45.0);
-  CHECK(topSpeedFor(MovementKind::Unknown, 45.0) == 45.0);
+  CHECK(speedForPhoneActivity(PhoneActivity::StandingStill, 45.0) == 0.5);
+  CHECK(speedForPhoneActivity(PhoneActivity::Walking, 45.0) == 3.0);
+  CHECK(speedForPhoneActivity(PhoneActivity::Running, 45.0) == 8.0);
+  CHECK(speedForPhoneActivity(PhoneActivity::Cycling, 45.0) == 12.0);
+  CHECK(speedForPhoneActivity(PhoneActivity::InVehicle, 45.0) == 45.0);
+  CHECK(speedForPhoneActivity(PhoneActivity::Unknown, 45.0) == 45.0);
 }
