@@ -122,6 +122,16 @@
 
 namespace lce {
 
+// =============================================================================
+// HELPERS - used only inside this file
+//
+// Everything between "namespace {" and "}  // namespace" is private: no other
+// file can see it or call it. In TypeScript this would be a function without
+// "export".
+//
+// The helpers come BEFORE the functions that use them because C++ reads the
+// file from top to bottom: a function must exist above the line that calls it.
+// =============================================================================
 namespace {
 
 // --- The speed we assume for each activity, in meters per second -------------
@@ -177,6 +187,13 @@ double calculateDistanceUsingSpeedReportedByGps(double gpsSpeed,
 }
 
 }  // namespace
+
+// =============================================================================
+// FUNCTIONS OTHER FILES CAN CALL
+//
+// These three are announced in UncertaintyModel.hpp. The main one is
+// calculateDistancePhoneCouldHaveMoved().
+// =============================================================================
 
 double speedForPhoneActivity(PhoneActivity phoneActivity,
                              double fastestPossibleSpeedMetersPerSecond) noexcept {
