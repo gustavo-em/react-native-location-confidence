@@ -357,6 +357,18 @@ Consequência conhecida para INV-08: por leitura, o score e a incerteza são mon
 | Simulação | `LocationConfidence.simulation` (`enable`, `disable`, `pushReadings`, `setPhoneActivity`) | não previsto |
 | O que o pacote exporta | o objeto `LocationConfidence`, as três classes de erro e os tipos; a função que monta o objeto fica interna | R-17 |
 
+### R-33 [B] App de exemplo: escolhas da Fase 7
+
+| Ponto | Escolha | Onde a SPEC ou a Fase 0 dizia outra coisa |
+|---|---|---|
+| Demonstração | coordenadas inventadas em volta de um ponto fixo público; o simulador só troca a origem das leituras, e o motor decide tudo | plano §2: "modo simulação com fixtures" |
+| Roteiros | código TypeScript (`scenarios.ts`), não arquivos JSON | plano §2 |
+| Mapa | desenhado com Views; nenhum serviço de mapas, chave ou rede | — |
+| Avaliações do simulador | tempo total 1 s, primeira tentativa 0,8 s, sem tempo extra | padrões da §4.2 (12 s, 4,5 s, 7 s) valem na tela "This phone" |
+| Linha do tempo | uma faixa com as últimas respostas (altura = índice, cor = relação) | plano §2: "timeline" |
+| Explicações | o exemplo traduz limites e motivos para frases; os códigos aparecem ao lado | — |
+| Dependência extra | `react-native-safe-area-context`, só no exemplo | — |
+
 ## Decisões — aprovadas pelo owner em 14/11/2026
 
 | ID | Decisão | Resultado |
