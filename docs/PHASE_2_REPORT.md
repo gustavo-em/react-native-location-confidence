@@ -1,13 +1,13 @@
-# Fase 2 — modelos: relatório (em andamento)
+# Fase 2 — modelos: relatório (concluída em 16/11/2026)
 
-Branch `phase/2-models`. A pedido do owner, a fase é feita em quatro passos, um por peça, com parada para leitura entre eles.
+Branch `phase/2-models`. A pedido do owner, a fase foi feita em quatro passos, um por peça. Os passos 2a a 2c tiveram parada para leitura entre eles; no dia 16/11/2026 o owner pediu que o restante da implementação fosse feito de uma vez ("vou tentar entender tudo quando tudo terminar"), então o passo 2d e as fases seguintes não têm mais parada.
 
 | Passo | Peça | Situação |
 |---|---|---|
 | 2a | Modelo de incerteza (`UncertaintyModel`) | feito |
 | 2b | Detector de saltos (`JumpDetector`; na SPEC, `OutlierDetector`) | feito |
 | 2c | Evidência de movimento (`PhoneActivityTimeline`; na SPEC, `MotionEvidenceAnalyzer`) | feito |
-| 2d | Seletor de candidato (`CandidateSelector`) | pendente |
+| 2d | Seletor de candidato e relatório (`ReadingSelection` e `Assessment`; na SPEC, `CandidateSelector` e `evaluateSnapshot`) | feito |
 
 ---
 
@@ -313,3 +313,105 @@ Pendentes:
 - Nada chama as três peças fora dos testes; o seletor (2d) será o primeiro.
 - Os campos do DTO `motion` (`state`, `confidence`, `coverageStartAgeMs`) ainda não são derivados; `gapsDetected` e `continuousStationaritySupported` já saem da tabela (`millisecondsUnknown > 0` e `standingStillTheWholeTime()`).
 - A cauda de latência de detecção (R-02) continua em aberto até haver medição em dispositivo.
+
+---
+
+## Passo 2d — escolha da leitura e relatório final
+
+Data: 16/11/2026.
+
+### Objetivo
+
+Duas perguntas, uma em cada arquivo:
+
+1. `ReadingSelection`: de todas as leituras guardadas, qual usar? (`chooseBestReading`)
+2. `Assessment`: com essa leitura, qual é o relatório? Dentro ou fora do raio, score, status, procedência e razões. (`buildAssessment`)
+
+`buildAssessment` é o `evaluateSnapshot` da SPEC: trabalha só com o que está na memória em um instante e não espera nada. Esperar leituras novas é a Fase 3.
+
+### Ordem das chamadas
+
+```text
+buildAssessment(history, activityHistory, nowMs, asked, request)        Assessment.cpp
+  |-- sem permissão de localização?  -> relatório "unavailable" e fim
+  |-- chooseBestReading()                                               ReadingSelection.cpp
+  |     |-- checkAllReadingsForGpsJumps()                               JumpDetector.cpp   (2b)
+  |     `-- para cada leitura que não é velha demais
+  |           |-- calculateTimeInEachPhoneActivity()                    PhoneActivityTimeline.cpp (2c)
+  |           |-- gpsSpeedMatchesTheMovement()
+  |           |-- calculateDistancePhoneCouldHaveMoved()                UncertaintyModel.cpp (2a)
+  |           `-- firstIsBetterThanSecond()
+  |-- findWhereTheReadingCameFrom()        fresh, recovered ou cached
+  |-- classifyRelation()                                                ProximityRelation.cpp (fase 1)
+  |-- calculateQualityScore()                                           QualityScore.cpp      (fase 1)
+  |-- decideTheStatus()                    available ou degraded
+  `-- describePhoneActivity() e writeDownTheReasons()
+```
+
+### Decisões adotadas
+
+- As leituras são comparadas por um número só: **quão longe o celular pode estar da leitura agora** (erro do GPS + distância que ele pode ter andado). Nem a mais nova nem a mais precisa ganha por padrão (HIS-018).
+- Cinco regras, em ordem: provável salto de GPS perde; menor "quão longe" ganha; depois a mais nova; depois o menor erro de GPS; depois a que chegou primeiro.
+- A leitura escolhida é sempre uma leitura medida. Nada é misturado nem interpolado (JMP-020).
+- Procedência (`source`) pelo **número de chegada**: a avaliação guarda qual era o próximo número quando começou e quando entrou no tempo extra. Os campos `obtainedByRequestId` e `obtainedDuring` da Fase 1 saíram: com avaliações simultâneas na mesma sessão, uma leitura não pertence a uma request só.
+- Novo campo `captureTimeWasEstimated` na leitura (hora calculada a partir do relógio de parede, caso do iOS). Vira `ageReliability = estimated` no relatório.
+- Os arquivos se chamam `ReadingSelection` e `Assessment`, pelo critério de nomes simples.
+
+As hipóteses onde a SPEC é omissa estão em `SPEC_REVIEW.md`, R-29.
+
+### Arquivos
+
+Criados: `cpp/src/ReadingSelection.hpp`, `cpp/src/ReadingSelection.cpp`, `cpp/src/Assessment.hpp`, `cpp/src/Assessment.cpp`, `cpp/src/ReadingSelection.study.ts`, `cpp/src/Assessment.study.ts`, `cpp/src/NodeRuntime.study.ts`, `cpp/tests/TestReadingSelection.cpp`, `cpp/tests/TestAssessment.cpp`.
+
+Modificados: `cpp/src/Types.hpp` e `cpp/src/ReadingChecker.hpp/.cpp` (campos da leitura), `cpp/src/LocationHistory.hpp` (`arrivalNumberOfNextReading`), `cpp/src/UncertaintyModel.hpp/.cpp` (as duas constantes da opção 2 passaram para o cabeçalho), `cpp/src/PhoneActivityTimeline.hpp/.cpp` (duas perguntas novas para o relatório: `findSinceWhenPhoneActivityIsKnown` e `findPhoneActivityAtMoment`), os três espelhos de estudo existentes, `cpp/tests/TestSupport.hpp`, `cpp/tests/TestUsage.cpp` (os cenários de uso agora passam pelo relatório de verdade, sem ligação manual), `cpp/CMakeLists.txt`, `tsconfig.json`.
+
+### Espelhos de estudo: agora um importa o outro
+
+Com as peças empilhadas, copiar o código emprestado em cada espelho deixaria os arquivos novos com centenas de linhas repetidas. Os espelhos passaram a se importar (`import ... from './JumpDetector.study.ts'`), do jeito que um `.cpp` inclui um `.hpp`. Os exemplos do fim de cada arquivo ficam dentro de `if (import.meta.main)` e só rodam quando aquele arquivo é o que foi executado. `NodeRuntime.study.ts` só ensina o TypeScript a aceitar `import.meta.main`.
+
+```sh
+node --no-warnings --experimental-transform-types cpp/src/ReadingSelection.study.ts
+node --no-warnings --experimental-transform-types cpp/src/Assessment.study.ts
+```
+
+### Comandos executados e resultado
+
+| # | Comando (resumo) | Exit | Resultado |
+|---|---|---:|---|
+| 1 | host C++17, `-Werror`, `lce_tests` | 0 | 252 casos, 0 falhas |
+| 2 | host C++20 | 0 | 252 casos, 0 falhas |
+| 3 | host C++17 com ASan + UBSan | 0 | 252 casos, 0 falhas, nenhum aviso dos sanitizers |
+| 4 | 86 mutações isoladas (23 em `ReadingSelection`, 54 em `Assessment`, 9 nas funções novas de `PhoneActivityTimeline`) | — | 86 de 86 detectadas |
+| 5 | espelho `Assessment.study.ts` (que usa os outros quatro) contra o C++: 20.000 casos gerados | 0 | 0 diferenças |
+| 6 | os cinco espelhos rodando sozinhos; `eslint` e `tsc` | 0 | sem erros |
+| 7 | `bob build` (pacote JS) depois da mudança no `tsconfig.json` | 0 | ok |
+
+Sobre as mutações: na primeira rodada, 71 foram detectadas, 4 não foram e 11 não compilaram (deixavam variável sem uso, e o build usa `-Werror`). As 4 não detectadas viraram testes novos (o erro da velocidade reportada, a velocidade máxima e a idade máxima escolhidas pelo app, e um relato de atividade que ainda não começou). As 11 foram reescritas para compilar. Na segunda rodada, 15 de 15.
+
+Sobre a comparação com o TypeScript: a coluna da distância até o endereço aceita diferença relativa de 1e-9. Ela passa por `sin`, `cos` e `atan2`, e a biblioteca matemática do C++ e a do JavaScript diferem no último dígito (R-07). Todas as outras colunas (status, procedência, score, tetos, razões, atividade) são idênticas.
+
+A suíte passou de 194 para 252 casos: 23 em `TestReadingSelection` e 35 em `TestAssessment`. Os 7 cenários de uso continuam com os mesmos números; o USE-6 ganhou a checagem de procedência (`cached`, porque a leitura tem 20 s).
+
+### IDs normativos
+
+Implementados e aprovados em host:
+
+- HIS-018, 019, 020, 022, 023, 024 pelo caminho completo.
+- JMP-001, 014, 018, 019, 020, 021 (parte de seleção).
+- MOT-014, 017, 022 no relatório.
+- SCR-001, 009, 010, 011, 016, 020, 024, 025, 026, 027, 030.
+- VAL-018, 019, 023, 024, 025.
+- Fixtures 12.1 a 12.6 da SPEC, com score exato (100; 75 com bruto 89; 15 com bruto 72).
+- INV-08 como propriedade, por leitura (ver limitação abaixo).
+
+Com isso a Fase 2 fecha os grupos JMP e MOT de core e a parte de SCR que dependia de seleção. JMP-013 (multipath) é coberto pela regra de consistência: havendo contradição, o score fica limitado a 75 e a relação continua valendo só pela geometria.
+
+### Limitação conhecida
+
+Por leitura, o score nunca sobe e a incerteza nunca diminui com o passar do tempo (testado como propriedade). Entre leituras isso não é garantido: a escolha minimiza a incerteza, não maximiza o score, então no instante em que a leitura escolhida muda o score do relatório pode subir. O mesmo acontece quando o histórico esquece, depois de 2 minutos, uma leitura que contradizia a escolhida. Registrado em R-29.
+
+### Não feito
+
+- iOS e Android não foram recompilados neste passo; isso volta nas Fases 4 e 5, quando a fachada C passa a chamar este código.
+- Os contadores de diagnóstico da avaliação (`readingsReceived`, `durationMs`, passos) existem no relatório, mas quem os preenche é a Fase 3.
+

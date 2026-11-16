@@ -272,6 +272,26 @@ Consequência conhecida: tirar um relato que **contradiz** outro melhora o resul
 
 As hipóteses do passo 2b (regra de rótulo do detector de saltos) estão em `PHASE_2_REPORT.md`.
 
+### R-29 [M] Escolha da leitura e relatório: hipóteses fixadas no passo 2d
+
+| Ponto | Escolha | Onde a SPEC é omissa ou foi revista |
+|---|---|---|
+| Critério principal da escolha | menor "quão longe o celular pode estar" (accuracy + deslocamento possível); leitura rotulada "provável salto" perde para qualquer outra | §6.5 itens 3 a 5 |
+| Desempates | a mais nova; depois a menor accuracy; depois a que chegou primeiro. O critério "source" da SPEC não entra: a procedência depende de quem pergunta, e duas leituras com a mesma incerteza, idade e accuracy não diferem em nada que ele decidiria | §6.5 item 4 |
+| Consistência | conta as leituras do histórico que não contradizem a escolhida. Se qualquer uma a contradiz, vale `ReadingsDisagree` (0,30 e teto 75), mesmo quando o outlier foi identificado | §6.7 ("0.30 if conflicting evidence/no strong consensus") e JMP-013 |
+| Só restam prováveis saltos | a melhor delas é devolvida, com status `degraded`, relação inconclusiva e teto 20 | §6.5 item 5 |
+| Procedência (`source`) | pelo número de chegada; leitura que o SO entrega de novo não ganha número novo e portanto não vira `fresh` | D-06 pedia "marcar cada amostra com a request e a fase" |
+| Só há leituras mais velhas que `maxFallbackAgeMs` | `unavailable`, sem posição, com `location_stale` e `no_usable_fix` | §5.3 item 5 admitia `degraded` |
+| Sem permissão de localização | `unavailable` sem posição, mesmo com leitura boa na memória | §6.5 item 1 |
+| Velocidade do GPS que não bate com o deslocamento | comparação com a leitura anterior, contando o erro das duas posições e a folga de aceleração (2,5 m/s² × dt / 2). Se não bate, a velocidade é ignorada no cálculo da distância e sai `location_metadata_inconsistent` | JMP-018 só pede o código de razão. O sentido perigoso (GPS diz "quase parado" e as posições mostram movimento) não estava previsto |
+| Status com permissão aproximada | sempre `degraded` | D-06 não lista |
+| `uncertainty_model_heuristic` | presente em todo relatório que tem posição | §6.4 |
+| `motion.state` e `motion.confidence` | o relato de maior confiança que cobre o agora, inclusive `Medium` e `Low` (só informativo; a distância continua usando só `High`) | campos sem regra |
+| `motion.coverageStartAgeMs` | há quanto tempo a atividade é conhecida sem interrupção até agora, contado só depois da leitura | campo sem regra |
+| `motion.gapsDetected` | parte do tempo desde a leitura é conhecida e parte não | campo sem regra |
+
+Consequência conhecida para INV-08: por leitura, o score e a incerteza são monótonos no tempo. Quando a leitura escolhida muda, o score do relatório pode subir, porque a escolha minimiza a incerteza e não maximiza o score (é o que §6.5 pede). O mesmo vale quando o histórico esquece, aos 120 s, uma leitura que contradizia a escolhida. As propriedades testadas valem "enquanto a leitura escolhida é a mesma".
+
 ## Decisões — aprovadas pelo owner em 14/11/2026
 
 | ID | Decisão | Resultado |
