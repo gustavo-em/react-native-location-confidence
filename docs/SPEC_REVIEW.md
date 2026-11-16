@@ -292,6 +292,34 @@ As hipóteses do passo 2b (regra de rótulo do detector de saltos) estão em `PH
 
 Consequência conhecida para INV-08: por leitura, o score e a incerteza são monótonos no tempo. Quando a leitura escolhida muda, o score do relatório pode subir, porque a escolha minimiza a incerteza e não maximiza o score (é o que §6.5 pede). O mesmo vale quando o histórico esquece, aos 120 s, uma leitura que contradizia a escolhida. As propriedades testadas valem "enquanto a leitura escolhida é a mesma".
 
+## Parte 6 — Achados durante a Fase 3 (aguardam ciência do owner)
+
+### R-30 [M] Política de tentativas, motor e fachada: escolhas da Fase 3
+
+| Ponto | Escolha | Onde a SPEC ou a Fase 0 dizia outra coisa |
+|---|---|---|
+| O que o core devolve à plataforma | como as coisas devem estar agora (GPS ligado? a cada quanto? atividade? acordar quando?) e uma lista de relatórios prontos. Não há lista de efeitos por avaliação nem `generation` | `NATIVE_TRANSPORT_SPEC.md` §4 (`lce_effects`), ADR-002. Ver ADR-019 |
+| Quem conta os interessados no GPS | o core: qualquer avaliação em curso ou sessão coletando | ADR-008 deixava na plataforma |
+| Timers | um só, para o motor inteiro; chamada adiantada ou repetida é inofensiva | `NATIVE_TRANSPORT_SPEC.md` §7 |
+| `QUERY_MOTION` | não existe. A atividade chega por `lce_phone_activity_changed` enquanto alguma avaliação a quer; nenhuma avaliação espera por ela | §5.1 e §5.2 (consulta de até 500 ms), R-03 |
+| Relato de atividade em curso | o core guarda a atividade em curso e a conta até o agora de cada avaliação | R-28 dizia que a plataforma estenderia o relato |
+| Onde vive a evidência de atividade | no motor: uma linha do tempo do aparelho, não uma por sessão | §3.6 (`ingestMotion(sessionId, ...)`) |
+| Motion opt-in | por avaliação (`enableMotionAssistance`), e só quando a permissão já existe. Não há opção na sessão | `IMPLEMENTATION_PLAN.md` §6 item 5 dizia "por sessão" |
+| Primeira leitura fraca | entra no tempo extra na hora, sem esperar o fim da primeira tentativa. Com tempo extra zero, continua esperando até o fim da primeira tentativa | §5.1 |
+| Primeira tentativa acaba sem nada novo | termina com a memória só quando há leitura lembrada com o celular parado desde ela, precisa e sem suspeita; senão, tempo extra | §5.1 (`HISTORY_STATIONARY_CHECK`) |
+| GPS inutilizável no início | não liga o GPS; responde com a memória: `degraded` se há leitura, senão `unavailable` | REC-021 dizia `unavailable`; REC-025 pede `degraded` quando há histórico |
+| Sem permissão | `unavailable` sempre, memória não usada | — |
+| Background, cancelamento, sessão fechada | `status = cancelled`, sem posição | CON-009 admitia "cancelar/degraded conforme política" |
+| Permissão perdida em uso | `unavailable` com `permission_denied`; históricos apagados | CON-021, §5.5 |
+| Falha do provedor | termina com a memória e `native_provider_unavailable`; a coleta das sessões para | REC-023, REC-025 |
+| Limites | 8 sessões, 16 avaliações, 4 por sessão; acima disso `busy` | ADR-008 propunha 4 por sessão |
+| Coleta de sessão (monitoring) | uma leitura guardada a cada `monitoringIntervalMs`; o GPS é pedido no menor intervalo entre as sessões, e a cada 1 s enquanto há avaliação | R-09 |
+| Coleta que parou | não volta sozinha. Se parou por tempo, os relatórios seguintes daquela sessão trazem `monitoring_duration_reached`; as outras causas não são anexadas | SES-006, SES-007 |
+| Reason code novo | `simulated_location_source` | não previsto |
+| `fallbackCause` | o motivo de ter ido além da primeira tentativa: `initial_fix_timeout`, ou a fraqueza da primeira leitura (`location_low_accuracy`, `possible_mock_location`, `precision_reduced`, `suspected_gps_jump`, `location_stale`, `no_usable_fix`) | campo sem regra |
+| `ageReliability = unreliable` | só quando nada pôde ser usado e leituras foram descartadas por problema de hora | campo sem regra |
+| Entrega de mais de 16 leituras de uma vez | a fachada passa ao motor em pedaços de 16; numa sessão que só coleta, só o primeiro pedaço é guardado (o ritmo de coleta vale por pedaço) | não previsto |
+
 ## Decisões — aprovadas pelo owner em 14/11/2026
 
 | ID | Decisão | Resultado |

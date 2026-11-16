@@ -108,3 +108,13 @@ Status possíveis: **Aceita**, **Aceita com emenda**, **Proposta** (aguarda apro
 
 - **Decisão proposta:** uma fila serial por módulo; background = processo parado (Android) / `didEnterBackground` (iOS), não perda de foco; portas `Clock`, `Scheduler` e `LifecycleSource` injetáveis.
 - **Consequência negativa:** avaliação continua rodando sob diálogos do sistema e Central de Controle, o que é uso de sensor com a UI parcialmente coberta; aceitável por ser foreground do ponto de vista do SO.
+
+### ADR-019 — O core diz como as coisas devem estar, não o que fazer — Proposta (implementada na Fase 3)
+
+- **Contexto:** a ADR-002 e o esboço de `NATIVE_TRANSPORT_SPEC.md` §4 previam que o core devolvesse, a cada evento, uma lista de efeitos por avaliação (`START_ACQUISITION`, `STOP_ACQUISITION`, `FINISH`), cada um com `generation`. A plataforma executaria cada efeito e contaria quantas avaliações usam o GPS.
+- **Alternativas:** (a) lista de efeitos, como no esboço; (b) o core expõe o estado desejado e a plataforma reconcilia.
+- **Decisão:** (b). Depois de cada chamada, a plataforma pergunta `lce_what_the_platform_must_do_now()` ("GPS ligado? a cada quanto? atualizações de atividade? acordar quando?") e `lce_take_finished_report()`, e ajusta o que for diferente do que já tem.
+- **Por quê:** um efeito pode ser perdido ou executado duas vezes; um estado desejado não. A contagem de interessados no GPS fica em um lugar só, no core, e é a mesma nas duas plataformas. O código Kotlin e o Swift ficam com a mesma forma: avisar o core, depois obedecer. Um timer só, sem `generation`, porque chamar `lce_time_passed` a mais é inofensivo.
+- **Consequências negativas:** a plataforma precisa perguntar depois de toda chamada (duas travessias de JNI a mais por evento; custo desprezível diante de um evento de GPS por segundo). O core passa a guardar relatórios prontos numa lista de tamanho fixo, e recusa avaliações novas se a plataforma parar de retirá-los.
+- **Gatilho de revisão:** medição que mostre custo relevante das travessias extras, ou necessidade de efeitos que não caibam em "estado desejado" (por exemplo, pedir ao SO uma leitura única com parâmetros próprios por avaliação).
+
