@@ -63,6 +63,7 @@ if(LCE_BUILD_TESTS)
     tests/TestRelation.cpp
     tests/TestScore.cpp
     tests/TestUncertainty.cpp
+    tests/TestUsage.cpp
     tests/TestValidation.cpp
   )
   set_target_properties(lce_tests PROPERTIES
