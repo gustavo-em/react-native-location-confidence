@@ -230,6 +230,48 @@ Nome do pacote a decidir (dois candidatos livres no npm hoje); `CLAUDE_GeoRelian
 | Reason codes de R-12 | os sete nomes sugeridos foram adotados | R-12 não era uma decisão D-xx |
 | Fix novo mais antigo que todo o buffer cheio | descartado (`DroppedAsOldest`) | não previsto |
 
+---
+
+## Parte 5 — Achados durante a Fase 2 (aguardam ciência do owner)
+
+### R-27 [A] A ordem fixa das opções do modelo de movimento violava INV-08
+
+**Local:** §6.4 (limites por atividade), D-01 (envelope da velocidade do fix, definido para o caso "sem motion"), INV-08 e §6.7 ("ausência de dados ou perda de motion coverage não aumenta score").
+
+**Risco:** o passo 2a usava a atividade do celular sempre que ela era conhecida, e só olhava a velocidade reportada pelo GPS quando a atividade era desconhecida. Quando a atividade é rápida e o GPS reportou velocidade baixa, saber a atividade dava distância **maior** do que não saber nada:
+
+| Situação | Com a atividade | Sem a atividade |
+|---|---:|---:|
+| correndo há 3 s, GPS 0,3 ± 0,5 m/s | 24 m | 15,15 m |
+| em veículo há 10 s, GPS 0,3 ± 0,5 m/s | 450 m | 138 m |
+| caso gerado pelo teste (veículo, 10,766 s, GPS com velocidade) | 484,47 m | 213,57 m |
+
+Perder a evidência de atividade diminuía a distância e, portanto, aumentava o score. Com a integração por trechos do passo 2c (parte do tempo conhecida, parte não), o caso deixaria de ser raro.
+
+**Alternativas:** (a) manter e documentar; (b) ignorar a velocidade do GPS sempre que houver alguma atividade, o que não resolve, porque o problema é a atividade conhecida ser pior do que nenhuma; (c) calcular todas as opções disponíveis e ficar com a menor distância.
+
+**Implementado:** (c). Cada opção é um limite superior ("o celular não pode estar mais longe do que isto"); quando dois limites valem, vale o menor. Não cria classe nova de risco: o envelope de D-01 já era aceito para "atividade desconhecida", que inclui estar em veículo. Os resultados só mudam quando a velocidade do GPS dá distância menor que a atividade; em todos os outros casos são idênticos aos de antes. Pela mesma razão, a velocidade de cada atividade passou a ser limitada pela velocidade máxima configurada.
+
+**Impacto nos testes:** o teste que expôs o defeito ficou como propriedade INV-08 em `TestUncertainty` (duas propriedades) e em `TestPhoneActivityTimeline` (perder um relato não diminui a distância); casos concretos em "the smaller distance wins".
+
+### R-28 [M] Cobertura de movimento: hipóteses fixadas no passo 2c
+
+R-02 deixou para a Fase 2 a decisão dos números de cobertura. O que foi fixado:
+
+| Ponto | Escolha | Onde a SPEC é omissa ou foi revista |
+|---|---|---|
+| Lacuna tolerada entre relatos (`maxMotionGapMs`) | zero: todo milissegundo sem relato conta como desconhecido | a SPEC sugere 2000 ms como hipótese; R-02 mudou o sentido de "lacuna" para interrupção de assinatura |
+| Quem mantém o relato do estado atual "aberto" até agora | a plataforma: ao pedir uma avaliação, estende o relato do estado atual até o mesmo `now` que passa ao core | consequência de R-02 |
+| Cauda de latência de detecção (R-02) | não tratada no core; fica em aberto até haver medição em dispositivo (Fases 4 e 5) | R-02 |
+| Confiança mínima de um relato | só `High`; `Medium`, `Low` e `Unknown` contam como desconhecido | a SPEC exige "high" para parado e não fala das outras atividades |
+| Dois relatos diferentes para o mesmo trecho | trecho desconhecido, com flag; nunca o mais favorável | MOT-014 pede "unknown no conflito" |
+| `hasReliableCoverage` do esboço de `MotionInterval` (§4.4) | removido; relato sem cobertura confiável não deve ser enviado, ou vem com confiança abaixo de `High` | campo sem regra de uso na SPEC |
+| Capacidade | 32 relatos; com a lista cheia o relato novo é recusado. A regra de esquecimento vem com as sessões (Fase 3) | não previsto |
+
+Consequência conhecida: tirar um relato que **contradiz** outro melhora o resultado, porque o trecho deixa de ser conflito. Isso é exigido por MOT-014 e não é perda de cobertura no sentido de INV-08; a propriedade testada vale para relatos que não se sobrepõem.
+
+As hipóteses do passo 2b (regra de rótulo do detector de saltos) estão em `PHASE_2_REPORT.md`.
+
 ## Decisões — aprovadas pelo owner em 14/11/2026
 
 | ID | Decisão | Resultado |

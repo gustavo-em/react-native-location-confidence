@@ -6,7 +6,7 @@ Branch `phase/2-models`. A pedido do owner, a fase é feita em quatro passos, um
 |---|---|---|
 | 2a | Modelo de incerteza (`UncertaintyModel`) | feito |
 | 2b | Detector de saltos (`JumpDetector`; na SPEC, `OutlierDetector`) | feito |
-| 2c | Evidência de movimento (`MotionEvidenceAnalyzer`) | pendente |
+| 2c | Evidência de movimento (`PhoneActivityTimeline`; na SPEC, `MotionEvidenceAnalyzer`) | feito |
 | 2d | Seletor de candidato (`CandidateSelector`) | pendente |
 
 ---
@@ -171,3 +171,145 @@ Pendentes: JMP-018 (velocidade alta reportada com coordenadas iguais), JMP-020 (
 - Android e iOS não foram recompilados com os arquivos novos; fica para o fim da Fase 2.
 - Nada chama o detector fora dos testes; o seletor (2d) será o primeiro a usá-lo.
 - Não há espelho de estudo em TypeScript para este módulo (só é feito a pedido).
+
+---
+
+## Verificação da versão dos passos 2a e 2b, com testes de uso
+
+Data: 16/11/2026. Pedido do owner antes de seguir para o passo 2c.
+
+### O que foi executado
+
+| # | Verificação | Resultado |
+|---|---|---|
+| 1 | suíte de host no commit do passo 2b (C++17, C++20, ASan + UBSan) | 155 casos, 0 falhas nas três |
+| 2 | `./gradlew assembleRelease` (R8, `arm64-v8a` + `x86_64`, NDK 27.1) | exit 0; `UncertaintyModel.cpp` e `JumpDetector.cpp` compilados para as duas ABIs |
+| 3 | app de exemplo no emulador `Medium_Phone` (arm64, API 37) | abre, mostra `abiVersion: 1`, `nativeloader` carregou `liblocation-confidence.so`, nenhum erro de JNI no log |
+| 4 | testes de uso novos (`cpp/tests/TestUsage.cpp`) | 6 cenários, todos passaram com os números calculados à mão antes de rodar |
+| 5 | espelho TypeScript do detector de saltos (`cpp/src/JumpDetector.study.ts`) contra o C++ | 20.000 históricos e 20.000 pares gerados, 0 diferenças |
+
+Sobre o item 2: o `.so` gerado não mudou. Nada na ponte JNI chama as funções novas, então o linker as deixa de fora (conferido com `llvm-nm`: nenhum símbolo do código novo no `.so`). O que a compilação prova é que os arquivos novos compilam com o NDK; eles só entram no binário quando a fachada C os usar (Fase 3).
+
+### Testes de uso
+
+`TestUsage.cpp` liga as peças na ordem em que o seletor (2d) vai ligar: `checkReading` → `history.store` → `checkAllReadingsForGpsJumps` → `calculateTimeInEachPhoneActivity` → `calculateDistancePhoneCouldHaveMoved` → `calculateHowFarPhoneCouldBeFromReading` → `distanceBetweenMeters` → `classifyRelation` → `calculateQualityScore`. Enquanto o seletor não existe, a ligação é feita à mão dentro do teste (`judgeReading`).
+
+Endereço na origem, raio de 100 m, erro do GPS de 5 m. Depois do passo 2c são 7 cenários:
+
+| Cenário | Pode ter andado | Relação | Score |
+|---|---:|---|---:|
+| USE-1 na porta, celular avisou "parado", leitura de 1 s | 0,5 m | dentro | 97 |
+| USE-2 na porta, sem aviso de atividade, leitura de 1 s | 45 m | dentro | 89 |
+| USE-2 a mesma leitura com 3 s | 135 m | inconclusivo | 35 |
+| USE-3 GPS pulou 450 m e voltou: a leitura que pulou | 1,5 m | inconclusivo | 20 |
+| USE-3 a leitura boa mais nova | 0,5 m | dentro | 75 |
+| USE-4 andando a 174 m do endereço | 3 m | fora | 97 |
+| USE-5 uma leitura com velocidade do GPS, 3 s | 15,15 m | dentro | 75 |
+| USE-6 uma leitura de 20 s, nada mais | 900 m | inconclusivo | 15 |
+| USE-7 "parado" só nos últimos 2 s de 10 s | 361 m | inconclusivo | 15 |
+| USE-7 "parado" nos 10 s inteiros | 5 m | dentro | 93 |
+
+### Defeito encontrado no passo 2a (R-27)
+
+Um teste novo, "perder a atividade do celular nunca diminui a distância nem aumenta o score", falhou contra o código do passo 2a:
+
+```
+REQUIRE( withoutActivity.meters >= withActivity.meters )
+values: REQUIRE( 213.57 >= 484.47 )      atividade: em veículo, 10,766 s, GPS com velocidade
+```
+
+Saber que o celular estava em um veículo dava 484 m; não saber nada dava 213 m. Registro e análise em `SPEC_REVIEW.md`, R-27.
+
+---
+
+## Correção no passo 2a — a menor distância vence
+
+Data: 16/11/2026.
+
+### O que mudou
+
+- **Regra:** antes, as três opções eram tentadas em ordem e só uma rodava. Agora toda opção disponível é calculada e vence a menor distância. Cada opção é um limite superior, então o menor limite é o que vale, e saber mais nunca piora a resposta.
+- **Entrada:** a função principal recebia uma única atividade para o tempo todo. Agora recebe a tabela `TimeInEachPhoneActivity` (quanto tempo em cada atividade), que o passo 2c preenche. A opção 1 soma os pedaços: `velocidade da atividade × segundos` para cada linha. Tempo sem informação conta na velocidade máxima.
+- **Limite por atividade:** `speedForPhoneActivity` nunca devolve mais que a velocidade máxima configurada.
+
+| Antes | Agora |
+|---|---|
+| `calculateDistancePhoneCouldHaveMoved(reading, millisecondsSinceReading, phoneActivity)` | `calculateDistancePhoneCouldHaveMoved(reading, timeInEachActivity)` |
+| — | `TimeInEachPhoneActivity` (tabela, com `add`, `totalMilliseconds`, `weKnowNothing`, `standingStillTheWholeTime`) |
+| — | `wholeTimeInOneActivity(phoneActivity, milliseconds)`: a tabela do caso simples |
+| — | `calculateDistanceUsingPhoneActivity` (helper privado da opção 1) |
+
+### O que não mudou
+
+Todos os resultados numéricos dos testes do passo 2a continuam iguais (andando 5 s = 15 m, GPS quase parado 3 s = 15,15 m, etc.), inclusive o rótulo `howItWasCalculated` em cada um. O resultado só é diferente quando a velocidade do GPS dá distância menor que a atividade conhecida.
+
+---
+
+## Passo 2c — linha do tempo da atividade do celular
+
+Data: 16/11/2026.
+
+### Objetivo
+
+Responder, para uma leitura: desde que ela foi tirada, quanto tempo o celular passou em cada atividade? A resposta é a tabela `TimeInEachPhoneActivity`, que o modelo de movimento (2a) transforma em metros.
+
+### Decisões adotadas
+
+- A entrada é uma lista de relatos (`PhoneActivityReport`): início, fim, atividade e confiança.
+- Três passos: achar os momentos em que algo muda (início e fim de cada relato, mais a hora da leitura e o agora); cada fatia entre dois momentos vizinhos recebe uma atividade; as fatias são somadas na tabela.
+- Fatia sem relato é desconhecida. Fatia com dois relatos de atividades diferentes é desconhecida e liga a flag `twoReportsDisagreed`.
+- Só relatos com confiança `High` são usados.
+- O arquivo se chama `PhoneActivityTimeline`, e não `MotionEvidenceAnalyzer` como na SPEC, pelo critério de nomes simples.
+
+As hipóteses onde a SPEC é omissa estão em `SPEC_REVIEW.md`, R-28 (lacuna tolerada zero, plataforma estende o relato atual até o agora, cauda de latência em aberto, confiança mínima, capacidade de 32 relatos).
+
+### Arquivos
+
+Criados: `cpp/src/PhoneActivityTimeline.hpp`, `cpp/src/PhoneActivityTimeline.cpp`, `cpp/src/PhoneActivityTimeline.study.ts`, `cpp/src/JumpDetector.study.ts`, `cpp/tests/TestPhoneActivityTimeline.cpp`, `cpp/tests/TestUsage.cpp`.
+Modificados: `cpp/src/UncertaintyModel.hpp`, `cpp/src/UncertaintyModel.cpp`, `cpp/src/UncertaintyModel.study.ts`, `cpp/tests/TestUncertainty.cpp`, `cpp/tests/TestJumps.cpp` e `cpp/tests/TestSupport.hpp` (helpers compartilhados), `cpp/CMakeLists.txt`, `docs/SPEC_REVIEW.md`.
+
+### Comandos executados e resultado
+
+| # | Comando (resumo) | Exit | Resultado |
+|---|---|---:|---|
+| 1 | host C++17, `-Werror`, `lce_tests` | 0 | 194 casos, 0 falhas |
+| 2 | host C++20 | 0 | 194 casos, 0 falhas |
+| 3 | host C++17 com ASan + UBSan | 0 | 194 casos, 0 falhas, nenhum aviso dos sanitizers |
+| 4 | 31 mutações isoladas (15 em `PhoneActivityTimeline`, 16 em `UncertaintyModel`) | — | 31 de 31 detectadas |
+| 5 | espelhos TypeScript contra o C++: 20.000 casos do modelo e 20.000 da linha do tempo | 0 | 0 diferenças |
+| 6 | `eslint` e `tsc` nos três arquivos `.study.ts` | 0 | sem erros nem avisos |
+| 7 | `./gradlew assembleRelease` com os arquivos finais | 0 | `PhoneActivityTimeline.cpp`, `UncertaintyModel.cpp` e `JumpDetector.cpp` compilados para `arm64-v8a` e `x86_64` |
+
+A suíte passou de 155 para 194 casos: 7 de uso, 8 a mais em `TestUncertainty` (26 no total) e 24 em `TestPhoneActivityTimeline`. Cada mutação rodou em cópia nova de `cpp/` com pasta de build nova.
+
+Uma mutação possível não entrou na lista por ser equivalente: aceitar relato que termina antes de começar. Um relato assim nunca cobre uma fatia, então o resultado é o mesmo com ou sem a checagem; ela fica no código como regra explícita.
+
+Um teste de propriedade ("perder um relato não diminui a distância") aceita 1 nanômetro de folga: "em veículo" e "desconhecido" contam os dois a 45 m/s, e a mesma soma feita em outro agrupamento difere na 13ª casa decimal.
+
+### IDs normativos
+
+Implementados e aprovados em host:
+
+- MOT-001, 002, 003, 004, 013, 014, 015, 020, 022, 023 na linha do tempo.
+- MOT-005, 006, 007, 008, 009 agora também pelo caminho completo (relatos → tabela → metros).
+- MOT-031 (novo, de R-02): um único relato que cobre o tempo todo basta.
+- MOT-029 e INV-08 como propriedades com relatos gerados.
+
+MOT-002 deixa de ser parcial: a exigência de cobertura contínua está feita.
+
+Pendentes:
+
+| ID | Motivo |
+|---|---|
+| MOT-017 | idade acima de `maxFallbackAgeMs` torna a leitura inelegível: é do seletor (2d) |
+| MOT-010, 011, 012, 021, 024, 025 | permissão, hardware, atraso e ciclo de vida: plataforma e política (Fases 3 a 5) |
+| MOT-018, 019 | documentação (movimento é do aparelho, não da pessoa); o aviso já está no cabeçalho de `PhoneActivityTimeline.hpp` |
+| JMP-018, JMP-020, SCR-010 e a parte de seleção de JMP-001/013/014/019/021 | seletor (2d) |
+
+### Não feito
+
+- iOS não foi recompilado nesta rodada (o owner pediu Android primeiro).
+- O `.so` do Android não contém o código novo: nada na fachada C o chama ainda.
+- Nada chama as três peças fora dos testes; o seletor (2d) será o primeiro.
+- Os campos do DTO `motion` (`state`, `confidence`, `coverageStartAgeMs`) ainda não são derivados; `gapsDetected` e `continuousStationaritySupported` já saem da tabela (`millisecondsUnknown > 0` e `standingStillTheWholeTime()`).
+- A cauda de latência de detecção (R-02) continua em aberto até haver medição em dispositivo.
