@@ -16,6 +16,7 @@ add_library(location_confidence_core STATIC
   src/GeoMath.cpp
   src/JumpDetector.cpp
   src/LocationHistory.cpp
+  src/PhoneActivityTimeline.cpp
   src/ProximityRelation.cpp
   src/QualityScore.cpp
   src/ReadingChecker.cpp
@@ -56,6 +57,7 @@ if(LCE_BUILD_TESTS)
     tests/TestGeoMath.cpp
     tests/TestHistory.cpp
     tests/TestJumps.cpp
+    tests/TestPhoneActivityTimeline.cpp
     tests/TestProperties.cpp
     tests/TestReasonCodes.cpp
     tests/TestRelation.cpp
