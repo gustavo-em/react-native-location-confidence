@@ -39,7 +39,8 @@
     "clean": "del-cli android/build example/android/build example/android/app/build example/ios/build lib",
     "prepare": "bob build",
     "typecheck": "tsc",
-    "lint": "eslint \"**/*.{js,ts,tsx}\""
+    "lint": "eslint \"**/*.{js,ts,tsx}\"",
+    "test": "jest"
   },
   "keywords": [
     "react-native",
@@ -71,6 +72,7 @@
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-ft-flow": "^3.0.11",
     "eslint-plugin-prettier": "^5.5.7",
+    "jest": "^30",
     "prettier": "^3.9.10",
     "react": "19.3.0",
     "react-native": "0.88.1",
