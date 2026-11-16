@@ -8,6 +8,7 @@
 
 #include "GeoMath.hpp"
 #include "LocationHistory.hpp"
+#include "PhoneActivityTimeline.hpp"
 #include "ProximityRelation.hpp"
 #include "QualityScore.hpp"
 #include "ReadingChecker.hpp"
@@ -64,6 +65,48 @@ inline lce::LocationHistory historyWith(std::initializer_list<lce::LocationReadi
     history.store(reading, newestCaptureMs);
   }
   return history;
+}
+
+// Seconds written in a test, as the milliseconds the engine works with.
+inline std::int64_t secondsToMs(double seconds) {
+  return static_cast<std::int64_t>(seconds * 1000.0);
+}
+
+// One report from the phone: "from this second to that second I was doing
+// this". The phone is very sure unless the test says otherwise.
+inline lce::PhoneActivityReport activityReport(
+    lce::PhoneActivity activity,
+    double fromSeconds,
+    double toSeconds,
+    lce::PhoneActivityConfidence confidence = lce::PhoneActivityConfidence::High) {
+  lce::PhoneActivityReport report;
+  report.startedAtMs = secondsToMs(fromSeconds);
+  report.endedAtMs = secondsToMs(toSeconds);
+  report.activity = activity;
+  report.confidence = confidence;
+  return report;
+}
+
+// Everything the phone reported about its activity.
+inline lce::PhoneActivityHistory activityHistoryWith(
+    std::initializer_list<lce::PhoneActivityReport> reports) {
+  lce::PhoneActivityHistory history;
+  for (const lce::PhoneActivityReport& report : reports) {
+    history.store(report);
+  }
+  return history;
+}
+
+// The phone reported one single activity.
+inline lce::PhoneActivityHistory phoneReported(lce::PhoneActivity activity,
+                                               double fromSeconds,
+                                               double toSeconds) {
+  return activityHistoryWith({activityReport(activity, fromSeconds, toSeconds)});
+}
+
+// The phone reported nothing about its activity.
+inline lce::PhoneActivityHistory phoneReportedNothing() {
+  return lce::PhoneActivityHistory{};
 }
 
 // The best possible reading: every grade is 1 and no limit applies.

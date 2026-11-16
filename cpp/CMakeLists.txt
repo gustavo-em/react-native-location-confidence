@@ -20,6 +20,7 @@ add_library(location_confidence_core STATIC
   src/ProximityRelation.cpp
   src/QualityScore.cpp
   src/ReadingChecker.cpp
+  src/ReadingSelection.cpp
   src/ReasonCodes.cpp
   src/UncertaintyModel.cpp
 )
@@ -59,6 +60,7 @@ if(LCE_BUILD_TESTS)
     tests/TestJumps.cpp
     tests/TestPhoneActivityTimeline.cpp
     tests/TestProperties.cpp
+    tests/TestReadingSelection.cpp
     tests/TestReasonCodes.cpp
     tests/TestRelation.cpp
     tests/TestScore.cpp
