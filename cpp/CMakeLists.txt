@@ -14,6 +14,7 @@ option(LCE_WERROR "Treat warnings as errors (host builds only)" OFF)
 add_library(location_confidence_core STATIC
   src/CFacade.cpp
   src/GeoMath.cpp
+  src/JumpDetector.cpp
   src/LocationHistory.cpp
   src/ProximityRelation.cpp
   src/QualityScore.cpp
@@ -54,6 +55,7 @@ if(LCE_BUILD_TESTS)
     tests/TestFacade.cpp
     tests/TestGeoMath.cpp
     tests/TestHistory.cpp
+    tests/TestJumps.cpp
     tests/TestProperties.cpp
     tests/TestReasonCodes.cpp
     tests/TestRelation.cpp
