@@ -193,18 +193,10 @@ constexpr double SPEED_WALKING = 3.0;   // about 11 km/h
 constexpr double SPEED_RUNNING = 8.0;   // about 29 km/h
 constexpr double SPEED_CYCLING = 12.0;  // about 43 km/h
 
-// --- Numbers used only in option 2 (speed reported by the GPS) ---------------
-
-// The GPS tells us a speed and also how wrong that speed may be.
-// To be safe, we add that error two times to the speed.
-// Example: speed 0.3 and error 0.5  ->  0.3 + 2 x 0.5 = 1.3
-constexpr double HOW_MANY_TIMES_WE_ADD_THE_GPS_SPEED_ERROR = 2.0;
-
-// The GPS measured the speed at the moment of the reading. After that, the
-// phone may have started to move faster (a courier who was stopped gets on
-// the motorbike). We assume the speed can grow by 2.5 meters per second,
-// every second. That is about how a car speeds up when it leaves quickly.
-constexpr double SPEED_THE_PHONE_CAN_GAIN_EACH_SECOND = 2.5;
+// The two numbers used in option 2 (speed reported by the GPS) are announced
+// in UncertaintyModel.hpp, because ReadingSelection.cpp uses them too:
+//   HOW_MANY_TIMES_WE_ADD_THE_GPS_SPEED_ERROR   = 2
+//   SPEED_THE_PHONE_CAN_GAIN_EACH_SECOND        = 2.5
 
 double millisecondsToSeconds(std::int64_t milliseconds) noexcept {
   return static_cast<double>(milliseconds) / 1000.0;

@@ -86,6 +86,11 @@ class LocationHistory {
 
   const Stats& stats() const noexcept { return stats_; }
 
+  // The arrival number the NEXT stored reading will get. An evaluation
+  // request asks this when it starts: every reading with this number or a
+  // higher one arrived after the request started.
+  std::uint64_t arrivalNumberOfNextReading() const noexcept { return nextArrivalNumber_; }
+
  private:
   bool isFull() const noexcept { return count_ == MAX_STORED_LOCATIONS; }
 

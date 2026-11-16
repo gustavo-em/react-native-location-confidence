@@ -62,6 +62,19 @@ enum class PhoneActivity : std::uint8_t {
 // which is 162 km/h. The app can choose a different number.
 inline constexpr double FASTEST_POSSIBLE_SPEED_METERS_PER_SECOND = 45.0;
 
+// --- The two numbers of option 2 (speed reported by the GPS) -----------------
+
+// The GPS tells us a speed and also how wrong that speed may be.
+// To be safe, we add that error two times to the speed.
+// Example: speed 0.3 and error 0.5  ->  0.3 + 2 x 0.5 = 1.3
+inline constexpr double HOW_MANY_TIMES_WE_ADD_THE_GPS_SPEED_ERROR = 2.0;
+
+// The GPS measured the speed at the moment of the reading. After that, the
+// phone may have started to move faster (a courier who was stopped gets on
+// the motorbike). We assume the speed can grow by 2.5 meters per second,
+// every second. That is about how a car speeds up when it leaves quickly.
+inline constexpr double SPEED_THE_PHONE_CAN_GAIN_EACH_SECOND = 2.5;
+
 // If the app gave a fastest speed that makes no sense (zero, negative, or not
 // a real number), this returns 45 instead. Otherwise it returns the same speed.
 // The jump detector (JumpDetector.cpp) uses it too.

@@ -114,11 +114,10 @@ ReadingCheck checkReading(const UncheckedReading& unchecked, std::int64_t nowMs)
   reading.position = normalizeCoordinates(reportedPosition);
   reading.horizontalAccuracyMeters = unchecked.horizontalAccuracyMeters;
   reading.capturedAtMs = capturedAtMs;
+  reading.captureTimeWasEstimated = unchecked.captureTimeWasEstimated;
   reading.onlyApproximatePermission = unchecked.onlyApproximatePermission;
   reading.provider = unchecked.provider;
   reading.mockSignal = unchecked.mockSignal;
-  reading.obtainedByRequestId = unchecked.obtainedByRequestId;
-  reading.obtainedDuring = unchecked.obtainedDuring;
 
   copyOptionalExtras(unchecked, result);
 

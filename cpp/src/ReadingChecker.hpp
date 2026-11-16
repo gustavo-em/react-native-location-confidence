@@ -34,6 +34,8 @@ struct UncheckedReading {
   // False when the platform code could not work out the capture time safely
   // (for example the user changed the clock, or the phone restarted).
   bool timeReliable = true;
+  // True when the capture time was worked out from the wall clock (iOS).
+  bool captureTimeWasEstimated = false;
 
   bool onlyApproximatePermission = false;
 
@@ -46,9 +48,6 @@ struct UncheckedReading {
 
   Provider provider = Provider::Fused;
   MockSignal mockSignal = MockSignal::Unknown;
-
-  std::uint32_t obtainedByRequestId = 0;
-  AcquisitionPhase obtainedDuring = AcquisitionPhase::Monitoring;
 };
 
 // The outcome of the entrance check.

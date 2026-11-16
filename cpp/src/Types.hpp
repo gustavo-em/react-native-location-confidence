@@ -70,17 +70,10 @@ enum class MockPolicy : std::uint8_t {
   FlagOnly,   // only report it; the score is not changed
 };
 
-// At which moment of the flow the reading was obtained.
-enum class AcquisitionPhase : std::uint8_t {
-  Monitoring,      // collected in the background of an open session
-  InitialAttempt,  // the first attempt of an evaluation
-  RecoveryWindow,  // the extra time given when the first attempt was not enough
-};
-
 // Where the reading used in the final answer came from.
 enum class FixSource : std::uint8_t {
   Fresh,        // obtained now, in the first attempt
-  Recovered,    // obtained now, during the recovery window
+  Recovered,    // obtained now, during the extra time given after the first attempt
   Cached,       // taken from the history (an older reading)
   Unavailable,  // there was no usable reading
 };
@@ -104,6 +97,11 @@ struct LocationReading {
   // user changes the date or time, so it is safe for measuring age.
   std::int64_t capturedAtMs = 0;
 
+  // True when the capture time had to be worked out from the wall clock (the
+  // clock the user can change). iOS only gives that kind of time. The reading
+  // is still used, and the final report says its age is an estimate.
+  bool captureTimeWasEstimated = false;
+
   // True when the user only allowed approximate location. The position may
   // then be off by kilometers, no matter what the accuracy field says.
   bool onlyApproximatePermission = false;
@@ -117,13 +115,10 @@ struct LocationReading {
   Provider provider = Provider::Fused;
   MockSignal mockSignal = MockSignal::Unknown;
 
-  // Which evaluation request obtained this reading (0 = none) and when.
-  std::uint32_t obtainedByRequestId = 0;
-  AcquisitionPhase obtainedDuring = AcquisitionPhase::Monitoring;
-
   // A counter given by the history when the reading is stored: 1, 2, 3...
-  // It only says "this one arrived before that one". Two readings with
-  // different numbers can still be the same reading delivered twice.
+  // It says "this one arrived before that one". An evaluation request uses it
+  // to tell the readings it obtained itself from the ones that were already
+  // in the history: it remembers which number was next when it started.
   std::uint64_t arrivalNumber = 0;
 };
 
