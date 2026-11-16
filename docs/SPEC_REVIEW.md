@@ -340,6 +340,23 @@ Consequência conhecida para INV-08: por leitura, o score e a incerteza são mon
 | Permissões no Manifest | a biblioteca não declara nenhuma; o app declara as duas de localização | R-21 |
 | `libc++_shared.so` | fica fora do AAR (o React Native já traz); o app de teste instrumentado mantém a sua cópia | — |
 
+### R-32 [M] Fachada TypeScript: escolhas da Fase 6
+
+| Ponto | Escolha | Onde a SPEC ou a Fase 0 dizia outra coisa |
+|---|---|---|
+| Módulo nativo ausente | importar nunca falha; a primeira chamada rejeita com `NativeModuleError` (`native_module_missing`) | §4.5 falava em "erro irrecuperável de Codegen na inicialização" |
+| Versão do nativo | cada relatório traz a versão do motor; se diferir da esperada pelo JavaScript, rejeita com `native_version_mismatch` | não previsto |
+| Sessões demais | `startSession` rejeita com `LocationConfidenceError` de código `busy` | D-07 definia só `{ id, monitoring, reasonCodes }` |
+| `SessionOptions` | sem `mode` e sem `historyCapacity` (D-07); sem `monitoringDistanceFilterMeters` (R-09) | §4.2 |
+| `maxMonitoringDurationMs` | mínimo 1000; acima de 3 600 000 (1 hora) é reduzido para 1 hora | §4.2 dizia "capped" sem número |
+| `monitoringIntervalMs` | inteiro de 1000 a 60000 | §4.2 só dava o padrão |
+| `maxFreshAgeMs`, `maxFallbackAgeMs` | no máximo 120000: é o que o motor lembra | §4.3 só exigia `>= 0` |
+| `initialFixBudgetMs` | acima do tempo total é reduzido para o tempo total | §4.3 ("max total") |
+| Cancelado antes de começar | relatório feito em JavaScript: `cancelled`, `request_cancelled`, `phaseTrace` = `started`, `finished`, `permissionPrecision` = `unknown` | §4.3 só dizia `status='cancelled'` |
+| Erros vindos do nativo | viram `InvalidArgumentError` ou `NativeModuleError`; código desconhecido vira `native_internal_error` | — |
+| Simulação | `LocationConfidence.simulation` (`enable`, `disable`, `pushReadings`, `setPhoneActivity`) | não previsto |
+| O que o pacote exporta | o objeto `LocationConfidence`, as três classes de erro e os tipos; a função que monta o objeto fica interna | R-17 |
+
 ## Decisões — aprovadas pelo owner em 14/11/2026
 
 | ID | Decisão | Resultado |
