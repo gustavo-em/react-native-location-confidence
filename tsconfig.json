@@ -4,6 +4,7 @@
     "paths": {
       "react-native-location-confidence": ["./src/index"]
     },
+    "allowImportingTsExtensions": true,
     "allowUnreachableCode": false,
     "allowUnusedLabels": false,
     "customConditions": [

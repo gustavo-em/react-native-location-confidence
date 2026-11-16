@@ -2,6 +2,7 @@
 // Same names, same order. Not part of the library. If it ever disagrees with
 // the C++, the C++ is right.
 // Run: node --no-warnings --experimental-transform-types cpp/src/JumpDetector.study.ts
+// The examples at the end only run when this file is the one being run.
 
 /*
 THE BUSINESS RULE
@@ -318,40 +319,46 @@ function show(
   }
 }
 
-const { LooksFine, InConflict, ProbablyGpsJump } = JumpCheckResult;
+if (import.meta.main) {
+  const { LooksFine, InConflict, ProbablyGpsJump } = JumpCheckResult;
 
-show(
-  'motorbike at 15 meters per second',
-  [readingNorth(0, 0), readingNorth(1, 15), readingNorth(2, 30)],
-  [LooksFine, LooksFine, LooksFine]
-);
-show(
-  'the GPS jumps away and comes back',
-  [readingNorth(0, 0), readingNorth(2, 450), readingNorth(4, 0)],
-  [InConflict, ProbablyGpsJump, InConflict]
-);
-show(
-  'only two readings, and they contradict',
-  [readingNorth(0, 0), readingNorth(2, 450)],
-  [InConflict, InConflict]
-);
-show(
-  'the old reading is the wrong one',
-  [
-    readingNorth(0, 0),
-    readingNorth(2, 450),
-    readingNorth(3, 455),
-    readingNorth(4, 460),
-  ],
-  [ProbablyGpsJump, InConflict, InConflict, InConflict]
-);
-show(
-  'same jump, but GPS errors of 300 meters',
-  [readingNorth(0, 0, 300), readingNorth(2, 450, 300), readingNorth(4, 0, 300)],
-  [LooksFine, LooksFine, LooksFine]
-);
-show(
-  'three readings all far from each other',
-  [readingNorth(0, 0), readingNorth(1, 2000), readingNorth(2, 4000)],
-  [ProbablyGpsJump, ProbablyGpsJump, ProbablyGpsJump]
-);
+  show(
+    'motorbike at 15 meters per second',
+    [readingNorth(0, 0), readingNorth(1, 15), readingNorth(2, 30)],
+    [LooksFine, LooksFine, LooksFine]
+  );
+  show(
+    'the GPS jumps away and comes back',
+    [readingNorth(0, 0), readingNorth(2, 450), readingNorth(4, 0)],
+    [InConflict, ProbablyGpsJump, InConflict]
+  );
+  show(
+    'only two readings, and they contradict',
+    [readingNorth(0, 0), readingNorth(2, 450)],
+    [InConflict, InConflict]
+  );
+  show(
+    'the old reading is the wrong one',
+    [
+      readingNorth(0, 0),
+      readingNorth(2, 450),
+      readingNorth(3, 455),
+      readingNorth(4, 460),
+    ],
+    [ProbablyGpsJump, InConflict, InConflict, InConflict]
+  );
+  show(
+    'same jump, but GPS errors of 300 meters',
+    [
+      readingNorth(0, 0, 300),
+      readingNorth(2, 450, 300),
+      readingNorth(4, 0, 300),
+    ],
+    [LooksFine, LooksFine, LooksFine]
+  );
+  show(
+    'three readings all far from each other',
+    [readingNorth(0, 0), readingNorth(1, 2000), readingNorth(2, 4000)],
+    [ProbablyGpsJump, ProbablyGpsJump, ProbablyGpsJump]
+  );
+}

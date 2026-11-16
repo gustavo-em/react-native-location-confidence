@@ -2,6 +2,7 @@
 // Same names, same order. Not part of the library. If it ever disagrees with
 // the C++, the C++ is right.
 // Run: node --no-warnings --experimental-transform-types cpp/src/PhoneActivityTimeline.study.ts
+// The examples at the end only run when this file is the one being run.
 
 /*
 THE BUSINESS RULE
@@ -29,6 +30,17 @@ THE ORDER OF THE CALLS
        ├─ findActivityDuringSlice()                               STEP 2
        │    └─ reportCanBeUsed()       once for each report
        └─ timeInEachActivity.add()                                STEP 3
+
+  Two smaller questions, used only to describe the activity in the final
+  report (they do not change any distance):
+
+  findSinceWhenPhoneActivityIsKnown(history, readingTakenAtMs, nowMs)
+  ├─ findMomentsOfChange()             the same slices as above
+  └─ for each slice: findActivityDuringSlice()
+       an unknown slice makes the count start again
+
+  findPhoneActivityAtMoment(history, momentMs)
+  └─ looks at every report that covers that moment
 
 ONE CALL, STEP BY STEP
 
@@ -60,8 +72,14 @@ WHAT THE REST OF THE ENGINE DOES WITH THE ANSWER
       0.5 x 10 + 3 x 15 + 45 x 5 = 5 + 45 + 225 = 275 meters
 
   The unknown time counts at the fastest speed (45), so every hole in the
-  reports makes the distance bigger. Today only the tests call these functions.
+  reports makes the distance bigger. chooseBestReading() in
+  ReadingSelection.cpp calls this file once for each reading it examines.
 */
+
+import {
+  PhoneActivity,
+  TimeInEachPhoneActivity,
+} from './UncertaintyModel.study.ts';
 
 export enum PhoneActivityConfidence {
   High,
@@ -189,6 +207,19 @@ function findActivityDuringSlice(
   return result;
 }
 
+function howSureAsNumber(confidence: PhoneActivityConfidence): number {
+  switch (confidence) {
+    case PhoneActivityConfidence.High:
+      return 3;
+    case PhoneActivityConfidence.Medium:
+      return 2;
+    case PhoneActivityConfidence.Low:
+      return 1;
+    case PhoneActivityConfidence.Unknown:
+      return 0;
+  }
+}
+
 export function calculateTimeInEachPhoneActivity(
   history: PhoneActivityHistory,
   readingTakenAtMs: number,
@@ -239,66 +270,101 @@ export function calculateTimeInEachPhoneActivity(
   return timeInEachActivity;
 }
 
-// Borrowed from UncertaintyModel.hpp so this file runs alone.
+export function findSinceWhenPhoneActivityIsKnown(
+  history: PhoneActivityHistory,
+  readingTakenAtMs: number,
+  nowMs: number
+): number {
+  if (readingTakenAtMs < 0) {
+    readingTakenAtMs = 0;
+  }
 
-export enum PhoneActivity {
-  StandingStill,
-  Walking,
-  Running,
-  Cycling,
-  InVehicle,
-  Unknown,
+  const noTimeHasPassed = nowMs <= readingTakenAtMs;
+  if (noTimeHasPassed) {
+    return nowMs;
+  }
+
+  const momentsOfChange = findMomentsOfChange(history, readingTakenAtMs, nowMs);
+
+  let knownSinceMs = nowMs;
+
+  for (let position = 0; position + 1 < momentsOfChange.length; position += 1) {
+    const sliceStartedAtMs = momentsOfChange[position];
+    const sliceEndedAtMs = momentsOfChange[position + 1];
+    if (sliceStartedAtMs === undefined || sliceEndedAtMs === undefined) {
+      continue;
+    }
+
+    const sliceIsEmpty = sliceEndedAtMs === sliceStartedAtMs;
+    if (sliceIsEmpty) {
+      continue;
+    }
+
+    const found = findActivityDuringSlice(
+      history,
+      sliceStartedAtMs,
+      sliceEndedAtMs
+    );
+
+    const activityIsUnknown = found.activity === PhoneActivity.Unknown;
+    const countHasNotStarted = knownSinceMs === nowMs;
+
+    if (activityIsUnknown) {
+      knownSinceMs = nowMs;
+    } else if (countHasNotStarted) {
+      knownSinceMs = sliceStartedAtMs;
+    }
+  }
+
+  return knownSinceMs;
 }
 
-export class TimeInEachPhoneActivity {
-  millisecondsStandingStill: number = 0;
-  millisecondsWalking: number = 0;
-  millisecondsRunning: number = 0;
-  millisecondsCycling: number = 0;
-  millisecondsInVehicle: number = 0;
+export class PhoneActivityAtOneMoment {
+  activity: PhoneActivity = PhoneActivity.Unknown;
+  confidence: PhoneActivityConfidence = PhoneActivityConfidence.Unknown;
+}
 
-  millisecondsUnknown: number = 0;
+export function findPhoneActivityAtMoment(
+  history: PhoneActivityHistory,
+  momentMs: number
+): PhoneActivityAtOneMoment {
+  const result = new PhoneActivityAtOneMoment();
+  let howSureIsTheBestSoFar = -1;
+  let twoEquallySureReportsDisagree = false;
 
-  twoReportsDisagreed: boolean = false;
+  for (let position = 0; position < history.size(); position += 1) {
+    const report = history.at(position);
 
-  add(phoneActivity: PhoneActivity, milliseconds: number): void {
-    const timeIsNegative = milliseconds < 0;
-    if (timeIsNegative) {
-      return;
+    const reportCoversTheMoment =
+      report.activity !== PhoneActivity.Unknown &&
+      report.endedAtMs > report.startedAtMs &&
+      report.startedAtMs <= momentMs &&
+      report.endedAtMs >= momentMs;
+    if (!reportCoversTheMoment) {
+      continue;
     }
 
-    switch (phoneActivity) {
-      case PhoneActivity.StandingStill:
-        this.millisecondsStandingStill += milliseconds;
-        break;
-      case PhoneActivity.Walking:
-        this.millisecondsWalking += milliseconds;
-        break;
-      case PhoneActivity.Running:
-        this.millisecondsRunning += milliseconds;
-        break;
-      case PhoneActivity.Cycling:
-        this.millisecondsCycling += milliseconds;
-        break;
-      case PhoneActivity.InVehicle:
-        this.millisecondsInVehicle += milliseconds;
-        break;
-      case PhoneActivity.Unknown:
-        this.millisecondsUnknown += milliseconds;
-        break;
+    const howSure = howSureAsNumber(report.confidence);
+
+    if (howSure > howSureIsTheBestSoFar) {
+      result.activity = report.activity;
+      result.confidence = report.confidence;
+      howSureIsTheBestSoFar = howSure;
+      twoEquallySureReportsDisagree = false;
+    } else if (
+      howSure === howSureIsTheBestSoFar &&
+      report.activity !== result.activity
+    ) {
+      twoEquallySureReportsDisagree = true;
     }
   }
 
-  totalMilliseconds(): number {
-    return (
-      this.millisecondsStandingStill +
-      this.millisecondsWalking +
-      this.millisecondsRunning +
-      this.millisecondsCycling +
-      this.millisecondsInVehicle +
-      this.millisecondsUnknown
-    );
+  if (twoEquallySureReportsDisagree) {
+    result.activity = PhoneActivity.Unknown;
+    result.confidence = PhoneActivityConfidence.Unknown;
   }
+
+  return result;
 }
 
 // Examples. The expected tables are the ones the C++ tests check.
@@ -356,48 +422,65 @@ function show(
   );
 }
 
-const { StandingStill, Walking, InVehicle } = PhoneActivity;
+if (import.meta.main) {
+  const { StandingStill, Walking, InVehicle } = PhoneActivity;
 
-show(
-  'two reports with a hole between them',
-  [phoneSaid(StandingStill, 0, 10), phoneSaid(Walking, 15, 30)],
-  30,
-  { standingStill: 10000, walking: 15000, unknown: 5000 }
-);
-show('no reports at all, 5 s', [], 5, { unknown: 5000 });
-show(
-  '"standing still" only for the last second of a minute',
-  [phoneSaid(StandingStill, 59, 60)],
-  60,
-  { standingStill: 1000, unknown: 59000 }
-);
-show(
-  'one report that covers the whole 30 s',
-  [phoneSaid(StandingStill, -5, 30)],
-  30,
-  { standingStill: 30000 }
-);
-show(
-  'standing still for 20 s, then walking for 10 s',
-  [phoneSaid(StandingStill, 0, 20), phoneSaid(Walking, 20, 30)],
-  30,
-  { standingStill: 20000, walking: 10000 }
-);
-show(
-  'two reports that disagree from second 10 to second 20',
-  [phoneSaid(StandingStill, 0, 30), phoneSaid(Walking, 10, 20)],
-  30,
-  { standingStill: 20000, unknown: 10000, twoReportsDisagreed: true }
-);
-show(
-  'a vehicle that parked 2 s ago',
-  [phoneSaid(InVehicle, 0, 28), phoneSaid(StandingStill, 28, 30)],
-  30,
-  { standingStill: 2000, inVehicle: 28000 }
-);
-show(
-  'a report the phone is not very sure about',
-  [phoneSaid(StandingStill, 0, 30, PhoneActivityConfidence.Medium)],
-  30,
-  { unknown: 30000 }
-);
+  show(
+    'two reports with a hole between them',
+    [phoneSaid(StandingStill, 0, 10), phoneSaid(Walking, 15, 30)],
+    30,
+    { standingStill: 10000, walking: 15000, unknown: 5000 }
+  );
+  show('no reports at all, 5 s', [], 5, { unknown: 5000 });
+  show(
+    '"standing still" only for the last second of a minute',
+    [phoneSaid(StandingStill, 59, 60)],
+    60,
+    { standingStill: 1000, unknown: 59000 }
+  );
+  show(
+    'one report that covers the whole 30 s',
+    [phoneSaid(StandingStill, -5, 30)],
+    30,
+    { standingStill: 30000 }
+  );
+  show(
+    'standing still for 20 s, then walking for 10 s',
+    [phoneSaid(StandingStill, 0, 20), phoneSaid(Walking, 20, 30)],
+    30,
+    { standingStill: 20000, walking: 10000 }
+  );
+  show(
+    'two reports that disagree from second 10 to second 20',
+    [phoneSaid(StandingStill, 0, 30), phoneSaid(Walking, 10, 20)],
+    30,
+    { standingStill: 20000, unknown: 10000, twoReportsDisagreed: true }
+  );
+  show(
+    'a vehicle that parked 2 s ago',
+    [phoneSaid(InVehicle, 0, 28), phoneSaid(StandingStill, 28, 30)],
+    30,
+    { standingStill: 2000, inVehicle: 28000 }
+  );
+  show(
+    'a report the phone is not very sure about',
+    [phoneSaid(StandingStill, 0, 30, PhoneActivityConfidence.Medium)],
+    30,
+    { unknown: 30000 }
+  );
+
+  const withAHole = new PhoneActivityHistory();
+  withAHole.store(phoneSaid(StandingStill, 0, 10));
+  withAHole.store(phoneSaid(Walking, 15, 30));
+
+  const knownSinceMs = findSinceWhenPhoneActivityIsKnown(withAHole, 0, 30000);
+  const rightNow = findPhoneActivityAtMoment(withAHole, 30000);
+  if (knownSinceMs !== 15000 || rightNow.activity !== Walking) {
+    throw new Error('known since / activity now: out of date');
+  }
+  console.log('with a hole from second 10 to 15, at second 30');
+  console.log(
+    `  known with no break since ${knownSinceMs} ms` +
+      `   right now: ${PhoneActivity[rightNow.activity]}`
+  );
+}

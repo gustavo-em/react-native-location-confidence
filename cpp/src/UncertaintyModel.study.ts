@@ -2,6 +2,8 @@
 // Same names, same order. Not part of the library. If it ever disagrees with
 // the C++, the C++ is right.
 // Run: node --no-warnings --experimental-transform-types cpp/src/UncertaintyModel.study.ts
+// The examples at the end only run when this file is the one being run. Other
+// study files import from this one, the way a C++ file includes a header.
 
 /*
 THE BUSINESS RULE
@@ -186,8 +188,8 @@ const SPEED_WALKING = 3.0;
 const SPEED_RUNNING = 8.0;
 const SPEED_CYCLING = 12.0;
 
-const HOW_MANY_TIMES_WE_ADD_THE_GPS_SPEED_ERROR = 2.0;
-const SPEED_THE_PHONE_CAN_GAIN_EACH_SECOND = 2.5;
+export const HOW_MANY_TIMES_WE_ADD_THE_GPS_SPEED_ERROR = 2.0;
+export const SPEED_THE_PHONE_CAN_GAIN_EACH_SECOND = 2.5;
 
 function millisecondsToSeconds(milliseconds: number): number {
   return milliseconds / 1000.0;
@@ -406,62 +408,74 @@ function show(
   );
 }
 
-const noSpeed: LocationReading = { horizontalAccuracyMeters: 10.0 };
+if (import.meta.main) {
+  const noSpeed: LocationReading = { horizontalAccuracyMeters: 10.0 };
 
-const almostStopped: LocationReading = {
-  horizontalAccuracyMeters: 10.0,
-  speedMetersPerSecond: 0.3,
-  speedAccuracyMetersPerSecond: 0.5,
-};
+  const almostStopped: LocationReading = {
+    horizontalAccuracyMeters: 10.0,
+    speedMetersPerSecond: 0.3,
+    speedAccuracyMetersPerSecond: 0.5,
+  };
 
-const movingFast: LocationReading = {
-  horizontalAccuracyMeters: 10.0,
-  speedMetersPerSecond: 40.0,
-  speedAccuracyMetersPerSecond: 5.0,
-};
+  const movingFast: LocationReading = {
+    horizontalAccuracyMeters: 10.0,
+    speedMetersPerSecond: 40.0,
+    speedAccuracyMetersPerSecond: 5.0,
+  };
 
-const { StandingStill, Walking, Running, InVehicle, Unknown } = PhoneActivity;
+  const { StandingStill, Walking, Running, InVehicle, Unknown } = PhoneActivity;
 
-const stillThenWalking = new TimeInEachPhoneActivity();
-stillThenWalking.add(StandingStill, 20000);
-stillThenWalking.add(Walking, 10000);
+  const stillThenWalking = new TimeInEachPhoneActivity();
+  stillThenWalking.add(StandingStill, 20000);
+  stillThenWalking.add(Walking, 10000);
 
-const stillThenNothing = new TimeInEachPhoneActivity();
-stillThenNothing.add(StandingStill, 2000);
-stillThenNothing.add(Unknown, 8000);
+  const stillThenNothing = new TimeInEachPhoneActivity();
+  stillThenNothing.add(StandingStill, 2000);
+  stillThenNothing.add(Unknown, 8000);
 
-show('walking, 5 s', noSpeed, wholeTimeInOneActivity(Walking, 5000), 15);
-show(
-  'in vehicle, 10 s',
-  noSpeed,
-  wholeTimeInOneActivity(InVehicle, 10000),
-  450
-);
-show('nothing known, 5 s', noSpeed, wholeTimeInOneActivity(Unknown, 5000), 225);
-show('nothing known, 3 s', noSpeed, wholeTimeInOneActivity(Unknown, 3000), 135);
-show(
-  'GPS almost stopped, 3 s',
-  almostStopped,
-  wholeTimeInOneActivity(Unknown, 3000),
-  15.15
-);
-show(
-  'GPS almost stopped, 10 s',
-  almostStopped,
-  wholeTimeInOneActivity(Unknown, 10000),
-  138
-);
-show(
-  'GPS says 40 m/s, 10 s',
-  movingFast,
-  wholeTimeInOneActivity(Unknown, 10000),
-  450
-);
-show('20 s still, then 10 s walking', noSpeed, stillThenWalking, 40);
-show('2 s still, 8 s with no report', noSpeed, stillThenNothing, 361);
-show(
-  'running 3 s, GPS almost stopped',
-  almostStopped,
-  wholeTimeInOneActivity(Running, 3000),
-  15.15
-);
+  show('walking, 5 s', noSpeed, wholeTimeInOneActivity(Walking, 5000), 15);
+  show(
+    'in vehicle, 10 s',
+    noSpeed,
+    wholeTimeInOneActivity(InVehicle, 10000),
+    450
+  );
+  show(
+    'nothing known, 5 s',
+    noSpeed,
+    wholeTimeInOneActivity(Unknown, 5000),
+    225
+  );
+  show(
+    'nothing known, 3 s',
+    noSpeed,
+    wholeTimeInOneActivity(Unknown, 3000),
+    135
+  );
+  show(
+    'GPS almost stopped, 3 s',
+    almostStopped,
+    wholeTimeInOneActivity(Unknown, 3000),
+    15.15
+  );
+  show(
+    'GPS almost stopped, 10 s',
+    almostStopped,
+    wholeTimeInOneActivity(Unknown, 10000),
+    138
+  );
+  show(
+    'GPS says 40 m/s, 10 s',
+    movingFast,
+    wholeTimeInOneActivity(Unknown, 10000),
+    450
+  );
+  show('20 s still, then 10 s walking', noSpeed, stillThenWalking, 40);
+  show('2 s still, 8 s with no report', noSpeed, stillThenNothing, 361);
+  show(
+    'running 3 s, GPS almost stopped',
+    almostStopped,
+    wholeTimeInOneActivity(Running, 3000),
+    15.15
+  );
+}
