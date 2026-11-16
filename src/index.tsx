@@ -1,21 +1,61 @@
-import NativeLocationConfidence, {
-  type SpikeEcho,
-  type SpikeInput,
-} from './NativeLocationConfidence';
-
-export type { SpikeEcho, SpikeInput };
+import { NativeModuleError } from './errors';
+import { createLocationConfidence } from './LocationConfidence';
+import NativeLocationConfidence from './NativeLocationConfidence';
 
 /**
- * Phase 0.5 (integration spike) surface. Not the public API of the library:
- * it only proves the JS -> native -> C core path on both platforms.
+ * The native module, or the error that says what is wrong with the
+ * installation. Importing the library never fails: the check only runs when
+ * the app calls something.
  */
-export function getAbiVersion(): Promise<number> {
-  return NativeLocationConfidence.getAbiVersion();
+function requireTheNativeModule() {
+  if (NativeLocationConfidence == null) {
+    throw new NativeModuleError(
+      'native_module_missing',
+      'The native part of react-native-location-confidence was not found. ' +
+        'Rebuild the app after installing the package (on iOS, run ' +
+        '"pod install" first). The library needs the New Architecture ' +
+        'and does not work in Expo Go.'
+    );
+  }
+  return NativeLocationConfidence;
 }
 
-export function spikeEcho(
-  requestId: string,
-  input: SpikeInput
-): Promise<SpikeEcho> {
-  return NativeLocationConfidence.spikeEcho(requestId, input);
-}
+/**
+ * Tells how good the location evidence is for "the phone is inside this
+ * delivery radius", while the app is on the screen.
+ *
+ * It never approves or refuses a delivery: it reports an index from 0 to
+ * 100 (not a percentage), what the evidence points to, and why.
+ */
+export const LocationConfidence = createLocationConfidence(
+  requireTheNativeModule
+);
+
+export {
+  InvalidArgumentError,
+  LocationConfidenceError,
+  NativeModuleError,
+} from './errors';
+
+export type {
+  AccuracyAuthorization,
+  AgeReliability,
+  Assessment,
+  AssessmentStatus,
+  Authorization,
+  Capabilities,
+  Coordinates,
+  EvaluateOptions,
+  EvaluateRequest,
+  EvidenceRelation,
+  FixSource,
+  LocationConfidenceApi,
+  MockLocationPolicy,
+  MotionConfidence,
+  MotionState,
+  PermissionStatus,
+  Session,
+  SessionOptions,
+  SimulatedReading,
+  SimulationApi,
+} from './types';
