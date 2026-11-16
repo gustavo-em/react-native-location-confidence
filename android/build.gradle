@@ -35,6 +35,9 @@ android {
 
     consumerProguardFiles "consumer-rules.pro"
 
+    // Runs the tests of src/sharedTest on a phone or an emulator.
+    testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+
     externalNativeBuild {
       cmake {
         // Same STL as React Native; the host app packages libc++_shared.so.
@@ -54,14 +57,74 @@ android {
     }
   }
 
-  packaging {
-    jniLibs {
-      // Provided by React Native in the host app.
-      excludes += ["**/libc++_shared.so"]
-    }
+  sourceSets {
+    // The same tests run in two places:
+    //   - on this computer's JVM, with the engine built for the computer
+    //     (./gradlew testDebugUnitTest);
+    //   - on a phone or an emulator, with the engine exactly as it ships
+    //     (./gradlew connectedDebugAndroidTest).
+    test.java.srcDirs += "src/sharedTest/java"
+    androidTest.java.srcDirs += "src/sharedTest/java"
+  }
+}
+
+androidComponents {
+  onVariants(selector().all()) { variant ->
+    // libc++_shared.so is left out of the library that apps consume: React
+    // Native already brings it, and two copies would not fit in one app.
+    // The app that runs the tests on a phone is not touched here, so it
+    // keeps its copy.
+    variant.packaging.jniLibs.excludes.add("**/libc++_shared.so")
   }
 }
 
 dependencies {
   implementation "com.facebook.react:react-android"
+
+  // The "fused location provider": Android's GPS mixed with Wi-Fi and cell towers.
+  implementation "com.google.android.gms:play-services-location:21.3.0"
+
+  // Tells when the whole app goes to the background and comes back.
+  implementation "androidx.lifecycle:lifecycle-process:2.8.7"
+
+  testImplementation "junit:junit:4.13.2"
+  androidTestImplementation "junit:junit:4.13.2"
+  androidTestImplementation "androidx.test:runner:1.6.2"
+}
+
+// --- Unit tests with the real engine, on this computer -----------------------
+//
+// testDebugUnitTest runs on the computer's JVM, not on a phone. To let the
+// tests use the real C++ engine through the real JNI file, the library is
+// first built for the computer (see src/test/cpp/CMakeLists.txt) and the
+// tests are told where to find it.
+
+def hostJniBuildDir = layout.buildDirectory.dir("host-jni").get().asFile
+
+tasks.register("configureHostJniLibrary", Exec) {
+  description = "Prepares the build of the JNI library for this computer."
+  inputs.file("src/test/cpp/CMakeLists.txt")
+  outputs.file(new File(hostJniBuildDir, "CMakeCache.txt"))
+  commandLine "cmake", "-S", file("src/test/cpp").absolutePath, "-B", hostJniBuildDir.absolutePath,
+      "-DCMAKE_BUILD_TYPE=Release"
+}
+
+tasks.register("buildHostJniLibrary", Exec) {
+  description = "Builds the JNI library for this computer, for the unit tests."
+  dependsOn "configureHostJniLibrary"
+  inputs.dir("src/main/cpp")
+  inputs.dir("../cpp/src")
+  inputs.dir("../cpp/include")
+  outputs.dir(hostJniBuildDir)
+  commandLine "cmake", "--build", hostJniBuildDir.absolutePath, "--parallel"
+}
+
+tasks.withType(Test).configureEach {
+  dependsOn "buildHostJniLibrary"
+  // Where System.loadLibrary("location-confidence") looks during the tests.
+  systemProperty "java.library.path", hostJniBuildDir.absolutePath
+  testLogging {
+    events "failed", "skipped"
+    exceptionFormat "full"
+  }
 }
