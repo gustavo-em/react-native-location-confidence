@@ -320,6 +320,26 @@ Consequência conhecida para INV-08: por leitura, o score e a incerteza são mon
 | `ageReliability = unreliable` | só quando nada pôde ser usado e leituras foram descartadas por problema de hora | campo sem regra |
 | Entrega de mais de 16 leituras de uma vez | a fachada passa ao motor em pedaços de 16; numa sessão que só coleta, só o primeiro pedaço é guardado (o ritmo de coleta vale por pedaço) | não previsto |
 
+## Parte 7 — Achados durante as fases de plataforma e de API (aguardam ciência do owner)
+
+### R-31 [M] Android: escolhas da Fase 4
+
+| Ponto | Escolha | Onde a SPEC ou a Fase 0 dizia outra coisa |
+|---|---|---|
+| Como os dados atravessam o JNI | cada struct vira uma lista de números (`DoubleArray`) escrita e lida na mesma ordem, com um número de conferência no fim; sem acesso a campos Java por nome | `NATIVE_TRANSPORT_SPEC.md` descrevia objetos |
+| Coordenação | um `EngineCoordinator` para o motor inteiro; não há `NativeEvaluationCoordinator` por avaliação nem `SessionRegistry`, porque o core guarda as sessões (R-30) | §3.4 |
+| Concorrência | uma fila serial de uma thread; sem coroutines | §3.4 (`CoroutineScope`), plano §3 (coroutines-test) |
+| Testes | os mesmos testes Kotlin rodam na JVM (motor compilado para o computador) e no aparelho (a `.so` entregue) | plano §3 previa suítes separadas |
+| GPS | só `requestLocationUpdates` em alta precisão, no intervalo pedido pelo motor; `getLastLocation` e `getCurrentLocation` nunca são chamados | §5.1 (one-shot); D-03 |
+| `source = cached` | significa apenas "lembrada pela sessão"; a leitura velha guardada pelo sistema não é consultada no Android | §4.2 |
+| Background | `ProcessLifecycleOwner`; o aviso chega cerca de 0,7 s depois de o app sair da tela | R-08 |
+| `denied` contra `not_determined` | o Android não diferencia; `denied` só depois de o app pedir nesta execução | §4.5 |
+| Motion | não suportado na v1.0: `motion: 'unsupported'`, `motion_unavailable`; `requestMotionPermission` não mostra diálogo | D-02 |
+| Modo simulação | o app troca o GPS por leituras próprias; sem GPS real, sem permissão, e todo relatório leva `simulated_location_source` | não previsto |
+| Sinal de mock | `Location.isMock` (Android 12+) ou `isFromMockProvider` | — |
+| Permissões no Manifest | a biblioteca não declara nenhuma; o app declara as duas de localização | R-21 |
+| `libc++_shared.so` | fica fora do AAR (o React Native já traz); o app de teste instrumentado mantém a sua cópia | — |
+
 ## Decisões — aprovadas pelo owner em 14/11/2026
 
 | ID | Decisão | Resultado |
