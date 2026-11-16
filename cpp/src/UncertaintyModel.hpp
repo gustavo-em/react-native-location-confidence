@@ -4,24 +4,38 @@
 // was 10 seconds ago, the courier may have walked 30 meters since then, or
 // ridden 450 meters on a motorbike. This file calculates that distance.
 //
-// There are three options, tried in this order:
+// There are three ways to calculate it:
 //
 //   Option 1 - We know what the phone was doing (walking, in a vehicle...).
 //              distance = speed of that activity x seconds
 //              walking for 5 seconds: 3 x 5 = 15 meters
 //
-//   Option 2 - We do not know the activity, but the GPS reading came with
-//              a speed. We use that speed, a little higher to be safe, and
-//              we also assume the phone may have sped up afterwards.
+//              The phone may have done more than one thing since the reading.
+//              Then each piece is calculated and the pieces are added.
+//              20 seconds standing still, then 10 seconds walking:
+//              0.5 x 20 + 3 x 10 = 40 meters
+//              A piece for which nobody told us the activity counts at the
+//              fastest speed possible.
+//
+//   Option 2 - The GPS reading came with a speed. We use that speed, a little
+//              higher to be safe, and we also assume the phone may have sped
+//              up afterwards.
 //              almost stopped, 3 seconds ago: about 15 meters
 //
 //   Option 3 - We know nothing. We assume the fastest speed possible.
 //              3 seconds ago: 45 x 3 = 135 meters
 //
-// One rule applies to all three: the answer is never bigger than Option 3.
+// Option 3 can always be calculated. Options 1 and 2 only when we have the
+// information. Every option that can be calculated gives a distance, and
+// THE SMALLEST DISTANCE WINS.
 //
-// A picture of the order of the calls, with four examples worked step by
-// step, is at the top of UncertaintyModel.cpp.
+// Why the smallest? Each option is a limit: "the phone cannot be farther
+// than this". When two limits are true, the phone respects both, so the
+// smaller one is the one that counts. It also guarantees that knowing more
+// never makes the answer worse.
+//
+// A picture of the order of the calls, with examples worked step by step, is
+// at the top of UncertaintyModel.cpp.
 //
 // All speeds in this file are guesses made for this project. They are not
 // physical limits: a phone can be carried faster than any of them.
@@ -53,7 +67,53 @@ inline constexpr double FASTEST_POSSIBLE_SPEED_METERS_PER_SECOND = 45.0;
 // The jump detector (JumpDetector.cpp) uses it too.
 double replaceInvalidSpeedWithDefault(double speed) noexcept;
 
-// Which of the three options was used to calculate the distance.
+// How long the phone spent in each activity since the GPS reading was taken.
+// It is a small table with one line for each activity:
+//
+//     standing still    20000 milliseconds
+//     walking           10000 milliseconds
+//     all the others        0
+//
+// The lines added together are the time since the reading was taken.
+// PhoneActivityTimeline.cpp fills this table from what the phone reported.
+struct TimeInEachPhoneActivity {
+  std::int64_t millisecondsStandingStill = 0;
+  std::int64_t millisecondsWalking = 0;
+  std::int64_t millisecondsRunning = 0;
+  std::int64_t millisecondsCycling = 0;
+  std::int64_t millisecondsInVehicle = 0;
+
+  // Time for which nobody told us what the phone was doing.
+  std::int64_t millisecondsUnknown = 0;
+
+  // True when, for some stretch of time, two reports from the phone said
+  // different things. That stretch was counted as unknown.
+  bool twoReportsDisagreed = false;
+
+  // Adds time to the line of one activity. A negative time is ignored.
+  void add(PhoneActivity phoneActivity, std::int64_t milliseconds) noexcept;
+
+  // All the lines added together.
+  std::int64_t totalMilliseconds() const noexcept {
+    return millisecondsStandingStill + millisecondsWalking + millisecondsRunning +
+           millisecondsCycling + millisecondsInVehicle + millisecondsUnknown;
+  }
+
+  // True when the whole time is unknown. Also true when no time has passed.
+  bool weKnowNothing() const noexcept { return millisecondsUnknown == totalMilliseconds(); }
+
+  // True when the phone was standing still during the whole time.
+  bool standingStillTheWholeTime() const noexcept {
+    return millisecondsStandingStill > 0 && millisecondsStandingStill == totalMilliseconds();
+  }
+};
+
+// The simplest table: the phone did one single thing during the whole time.
+//     wholeTimeInOneActivity(PhoneActivity::Walking, 5000)   ->   walking 5000
+TimeInEachPhoneActivity wholeTimeInOneActivity(PhoneActivity phoneActivity,
+                                               std::int64_t milliseconds) noexcept;
+
+// Which of the three options gave the distance.
 enum class HowDistanceWasCalculated : std::uint8_t {
   FromPhoneActivity,             // option 1
   FromSpeedReportedByGps,        // option 2
@@ -76,21 +136,22 @@ struct DistancePhoneCouldHaveMoved {
 // The speed we assume for each activity, in meters per second.
 //   StandingStill 0.5    Walking 3    Running 8    Cycling 12
 //   InVehicle and Unknown: the fastest possible speed
+// The answer is never above the fastest possible speed.
 double speedForPhoneActivity(PhoneActivity phoneActivity,
                              double fastestPossibleSpeedMetersPerSecond) noexcept;
 
 // THE MAIN FUNCTION OF THIS FILE.
 // How many meters could the phone have moved since this GPS reading?
 //
-//   reading                   the GPS reading we are judging
-//   millisecondsSinceReading  how long ago the reading was taken
-//   phoneActivity             what the phone was doing since then, or Unknown
+//   reading             the GPS reading we are judging
+//   timeInEachActivity  how long the phone spent in each activity since the
+//                       reading was taken (the lines added together are the
+//                       time since the reading)
 //   fastestPossibleSpeedMetersPerSecond
-//                             normally 45; the app can change it
+//                       normally 45; the app can change it
 DistancePhoneCouldHaveMoved calculateDistancePhoneCouldHaveMoved(
     const LocationReading& reading,
-    std::int64_t millisecondsSinceReading,
-    PhoneActivity phoneActivity,
+    const TimeInEachPhoneActivity& timeInEachActivity,
     double fastestPossibleSpeedMetersPerSecond =
         FASTEST_POSSIBLE_SPEED_METERS_PER_SECOND) noexcept;
 
