@@ -155,16 +155,6 @@ constexpr double HOW_MANY_TIMES_WE_ADD_THE_GPS_SPEED_ERROR = 2.0;
 // every second. That is about how a car speeds up when it leaves quickly.
 constexpr double SPEED_THE_PHONE_CAN_GAIN_EACH_SECOND = 2.5;
 
-// If the app gave a speed that makes no sense (zero, negative, or not a real
-// number), we ignore it and use 45.
-double replaceInvalidSpeedWithDefault(double speed) noexcept {
-  const bool speedIsValid = std::isfinite(speed) && speed > 0.0;
-  if (speedIsValid) {
-    return speed;
-  }
-  return FASTEST_POSSIBLE_SPEED_METERS_PER_SECOND;
-}
-
 // Option 2: the distance, using the speed that the GPS reported.
 //
 // Example: the GPS said speed 0.3 with error 0.5, and that was 3 seconds ago.
@@ -191,9 +181,20 @@ double calculateDistanceUsingSpeedReportedByGps(double gpsSpeed,
 // =============================================================================
 // FUNCTIONS OTHER FILES CAN CALL
 //
-// These three are announced in UncertaintyModel.hpp. The main one is
+// These four are announced in UncertaintyModel.hpp. The main one is
 // calculateDistancePhoneCouldHaveMoved().
 // =============================================================================
+
+// If the app gave a speed that makes no sense (zero, negative, or not a real
+// number), we ignore it and use 45.
+// It is not private because the jump detector needs the same rule.
+double replaceInvalidSpeedWithDefault(double speed) noexcept {
+  const bool speedIsValid = std::isfinite(speed) && speed > 0.0;
+  if (speedIsValid) {
+    return speed;
+  }
+  return FASTEST_POSSIBLE_SPEED_METERS_PER_SECOND;
+}
 
 double speedForPhoneActivity(PhoneActivity phoneActivity,
                              double fastestPossibleSpeedMetersPerSecond) noexcept {

@@ -48,6 +48,11 @@ enum class PhoneActivity : std::uint8_t {
 // which is 162 km/h. The app can choose a different number.
 inline constexpr double FASTEST_POSSIBLE_SPEED_METERS_PER_SECOND = 45.0;
 
+// If the app gave a fastest speed that makes no sense (zero, negative, or not
+// a real number), this returns 45 instead. Otherwise it returns the same speed.
+// The jump detector (JumpDetector.cpp) uses it too.
+double replaceInvalidSpeedWithDefault(double speed) noexcept;
+
 // Which of the three options was used to calculate the distance.
 enum class HowDistanceWasCalculated : std::uint8_t {
   FromPhoneActivity,             // option 1
