@@ -125,6 +125,26 @@ TimeInEachPhoneActivity calculateTimeInEachPhoneActivity(const PhoneActivityHist
                                                          std::int64_t readingTakenAtMs,
                                                          std::int64_t nowMs) noexcept;
 
+// --- Two smaller questions, used to describe the activity in the final report --
+
+// Going back in time from now: since when do we know what the phone was
+// doing, with no break? Only the time after the reading is looked at.
+// When the most recent moments are unknown, the answer is `nowMs`.
+std::int64_t findSinceWhenPhoneActivityIsKnown(const PhoneActivityHistory& history,
+                                               std::int64_t readingTakenAtMs,
+                                               std::int64_t nowMs) noexcept;
+
+// What the phone is doing at one moment, and how sure it is.
+struct PhoneActivityAtOneMoment {
+  PhoneActivity activity = PhoneActivity::Unknown;
+  PhoneActivityConfidence confidence = PhoneActivityConfidence::Unknown;
+};
+
+// What is the phone doing at this moment? The report the phone is most sure
+// about wins; two equally sure reports that disagree give Unknown.
+PhoneActivityAtOneMoment findPhoneActivityAtMoment(const PhoneActivityHistory& history,
+                                                   std::int64_t momentMs) noexcept;
+
 }  // namespace lce
 
 #endif  // LCE_PHONE_ACTIVITY_TIMELINE_HPP

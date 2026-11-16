@@ -16,6 +16,17 @@
 //            `-- timeInEachActivity.add()                  STEP 3
 //                                                          (lives in UncertaintyModel.cpp)
 //
+//   Two smaller questions, used only to describe the phone activity in the
+//   final report (they do not change any distance):
+//
+//   findSinceWhenPhoneActivityIsKnown(history, readingTakenAtMs, nowMs)
+//     |-- findMomentsOfChange()                            the same slices as above
+//     `-- for each slice: findActivityDuringSlice()
+//            an unknown slice makes the count start again
+//
+//   findPhoneActivityAtMoment(history, momentMs)
+//     `-- looks at every report that covers that moment
+//
 // =============================================================================
 // EXAMPLES, STEP BY STEP
 // Times are written in seconds here. The code works in milliseconds.
@@ -93,8 +104,8 @@
 // activity x the seconds spent in it. Time in the "unknown" line counts at
 // the fastest speed, so every hole in the reports makes the distance bigger.
 //
-// The candidate selector, which is the next piece to be written, will call
-// this file once for each reading it wants to judge.
+// chooseBestReading() in ReadingSelection.cpp calls this file once for each
+// reading it examines.
 // =============================================================================
 
 #include "PhoneActivityTimeline.hpp"
@@ -221,12 +232,27 @@ ActivityDuringSlice findActivityDuringSlice(const PhoneActivityHistory& history,
   return result;
 }
 
+// How sure the phone is, as a number, so two reports can be compared.
+int howSureAsNumber(PhoneActivityConfidence confidence) noexcept {
+  switch (confidence) {
+    case PhoneActivityConfidence::High:
+      return 3;
+    case PhoneActivityConfidence::Medium:
+      return 2;
+    case PhoneActivityConfidence::Low:
+      return 1;
+    case PhoneActivityConfidence::Unknown:
+      return 0;
+  }
+  return 0;  // never reached; some compilers ask for it
+}
+
 }  // namespace
 
 // =============================================================================
 // FUNCTIONS OTHER FILES CAN CALL
 //
-// Only one is announced in PhoneActivityTimeline.hpp.
+// They are announced in PhoneActivityTimeline.hpp.
 // =============================================================================
 
 TimeInEachPhoneActivity calculateTimeInEachPhoneActivity(const PhoneActivityHistory& history,
@@ -275,6 +301,104 @@ TimeInEachPhoneActivity calculateTimeInEachPhoneActivity(const PhoneActivityHist
   }
 
   return timeInEachActivity;
+}
+
+// Going back in time from now: since when do we know what the phone was
+// doing, with no break? Only the time after the reading is looked at.
+//
+//   reading at second 0, now is second 30
+//   standing still from 0 to 10, nothing from 10 to 15, walking from 15 to 30
+//     -> known since second 15  (the hole from 10 to 15 breaks the count)
+//
+// When the most recent slice is unknown, the answer is `nowMs`: known for
+// zero milliseconds.
+std::int64_t findSinceWhenPhoneActivityIsKnown(const PhoneActivityHistory& history,
+                                               std::int64_t readingTakenAtMs,
+                                               std::int64_t nowMs) noexcept {
+  if (readingTakenAtMs < 0) {
+    readingTakenAtMs = 0;
+  }
+
+  const bool noTimeHasPassed = (nowMs <= readingTakenAtMs);
+  if (noTimeHasPassed) {
+    return nowMs;
+  }
+
+  const MomentsOfChange momentsOfChange = findMomentsOfChange(history, readingTakenAtMs, nowMs);
+
+  // `nowMs` here means "the count has not started".
+  std::int64_t knownSinceMs = nowMs;
+
+  for (std::size_t position = 0; position + 1 < momentsOfChange.howMany; ++position) {
+    const std::int64_t sliceStartedAtMs = momentsOfChange.moments[position];
+    const std::int64_t sliceEndedAtMs = momentsOfChange.moments[position + 1];
+
+    const bool sliceIsEmpty = (sliceEndedAtMs == sliceStartedAtMs);
+    if (sliceIsEmpty) {
+      continue;
+    }
+
+    const ActivityDuringSlice found =
+        findActivityDuringSlice(history, sliceStartedAtMs, sliceEndedAtMs);
+
+    const bool activityIsUnknown = (found.activity == PhoneActivity::Unknown);
+    const bool countHasNotStarted = (knownSinceMs == nowMs);
+
+    if (activityIsUnknown) {
+      knownSinceMs = nowMs;  // a break: the count starts again
+    } else if (countHasNotStarted) {
+      knownSinceMs = sliceStartedAtMs;
+    }
+  }
+
+  return knownSinceMs;
+}
+
+// What is the phone doing at this moment, and how sure is it?
+//
+// Every report that covers the moment is looked at, also the ones the phone
+// is not very sure about. The report the phone is most sure about wins. When
+// two reports are equally sure and say different things, the answer is
+// Unknown.
+//
+// This answer is only shown in the final report. The distance the phone
+// could have moved never uses it (that calculation only accepts High).
+PhoneActivityAtOneMoment findPhoneActivityAtMoment(const PhoneActivityHistory& history,
+                                                   std::int64_t momentMs) noexcept {
+  PhoneActivityAtOneMoment result;
+  int howSureIsTheBestSoFar = -1;  // -1: no report found yet
+  bool twoEquallySureReportsDisagree = false;
+
+  for (std::size_t position = 0; position < history.size(); ++position) {
+    const PhoneActivityReport& report = history.at(position);
+
+    const bool reportCoversTheMoment = report.activity != PhoneActivity::Unknown &&
+                                       report.endedAtMs > report.startedAtMs &&
+                                       report.startedAtMs <= momentMs &&
+                                       report.endedAtMs >= momentMs;
+    if (!reportCoversTheMoment) {
+      continue;
+    }
+
+    const int howSure = howSureAsNumber(report.confidence);
+
+    if (howSure > howSureIsTheBestSoFar) {
+      result.activity = report.activity;
+      result.confidence = report.confidence;
+      howSureIsTheBestSoFar = howSure;
+      twoEquallySureReportsDisagree = false;
+
+    } else if (howSure == howSureIsTheBestSoFar && report.activity != result.activity) {
+      twoEquallySureReportsDisagree = true;
+    }
+  }
+
+  if (twoEquallySureReportsDisagree) {
+    result.activity = PhoneActivity::Unknown;
+    result.confidence = PhoneActivityConfidence::Unknown;
+  }
+
+  return result;
 }
 
 }  // namespace lce
