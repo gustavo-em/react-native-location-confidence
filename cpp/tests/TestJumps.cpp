@@ -2,7 +2,6 @@
 #include "third_party/doctest.h"
 
 #include <cstdint>
-#include <initializer_list>
 #include <limits>
 
 #include "GeoMath.hpp"
@@ -12,36 +11,13 @@
 
 using namespace lce;
 using lce_test::DeterministicRng;
+using lce_test::historyWith;
 using lce_test::readingAt;
+using lce_test::readingNorth;
 
 using Label = JumpCheckResult;
 
 namespace {
-
-// A reading taken `seconds` after the start, `metersNorth` meters north of
-// the starting point.
-LocationReading readingNorth(double seconds, double metersNorth, double gpsErrorMeters = 5.0) {
-  const double pi = 3.14159265358979323846;
-  const double degreesPerMeter = 180.0 / (pi * EARTH_RADIUS_METERS);
-  return readingAt(static_cast<std::int64_t>(seconds * 1000.0), metersNorth * degreesPerMeter,
-                   0.0, gpsErrorMeters);
-}
-
-// A history holding these readings. "Now" is the moment of the newest one,
-// so nothing is thrown away for being old.
-LocationHistory historyWith(std::initializer_list<LocationReading> readings) {
-  std::int64_t newestCaptureMs = 0;
-  for (const LocationReading& reading : readings) {
-    if (reading.capturedAtMs > newestCaptureMs) {
-      newestCaptureMs = reading.capturedAtMs;
-    }
-  }
-  LocationHistory history;
-  for (const LocationReading& reading : readings) {
-    history.store(reading, newestCaptureMs);
-  }
-  return history;
-}
 
 Label labelAt(const JumpCheckOfAllReadings& all, std::size_t position) {
   return all.ofEachReading[position].result;

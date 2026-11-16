@@ -3,8 +3,11 @@
 #define LCE_TEST_SUPPORT_HPP
 
 #include <cstdint>
+#include <initializer_list>
 #include <random>
 
+#include "GeoMath.hpp"
+#include "LocationHistory.hpp"
 #include "ProximityRelation.hpp"
 #include "QualityScore.hpp"
 #include "ReadingChecker.hpp"
@@ -34,6 +37,33 @@ inline lce::LocationReading readingAt(std::int64_t capturedAtMs,
   reading.horizontalAccuracyMeters = accuracyMeters;
   reading.capturedAtMs = capturedAtMs;
   return reading;
+}
+
+// A reading taken `seconds` after the start, `metersNorth` meters north of
+// the starting point (latitude 0, longitude 0).
+inline lce::LocationReading readingNorth(double seconds,
+                                         double metersNorth,
+                                         double gpsErrorMeters = 5.0) {
+  const double pi = 3.14159265358979323846;
+  const double degreesPerMeter = 180.0 / (pi * lce::EARTH_RADIUS_METERS);
+  return readingAt(static_cast<std::int64_t>(seconds * 1000.0), metersNorth * degreesPerMeter,
+                   0.0, gpsErrorMeters);
+}
+
+// A history holding these readings. "Now" is the moment of the newest one,
+// so nothing is thrown away for being old.
+inline lce::LocationHistory historyWith(std::initializer_list<lce::LocationReading> readings) {
+  std::int64_t newestCaptureMs = 0;
+  for (const lce::LocationReading& reading : readings) {
+    if (reading.capturedAtMs > newestCaptureMs) {
+      newestCaptureMs = reading.capturedAtMs;
+    }
+  }
+  lce::LocationHistory history;
+  for (const lce::LocationReading& reading : readings) {
+    history.store(reading, newestCaptureMs);
+  }
+  return history;
 }
 
 // The best possible reading: every grade is 1 and no limit applies.
