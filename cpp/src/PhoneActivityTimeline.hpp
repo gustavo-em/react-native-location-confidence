@@ -76,9 +76,6 @@ struct PhoneActivityReport {
 inline constexpr std::size_t MAX_STORED_ACTIVITY_REPORTS = 32;
 
 // The reports received from the phone. Their order has no meaning.
-//
-// For now this is only a list. Which old reports to forget when it is full
-// will be decided together with the sessions, in a later phase.
 class PhoneActivityHistory {
  public:
   // Stores one report. When there is no room left it stores nothing and
@@ -92,6 +89,16 @@ class PhoneActivityHistory {
     count_ += 1;
     return true;
   }
+
+  // Stores one report and always succeeds: when there is no room left, the
+  // report that ended first gives up its place. The engine uses this one, so
+  // that a long session never stops accepting new reports.
+  void storeAndForgetTheOldestIfFull(const PhoneActivityReport& report) noexcept;
+
+  // Forgets every report that ended before this moment. A report that ended
+  // more than 2 minutes ago is useless, because no GPS reading is kept for
+  // longer than that.
+  void forgetReportsThatEndedBefore(std::int64_t momentMs) noexcept;
 
   // Forgets every report.
   void clear() noexcept {

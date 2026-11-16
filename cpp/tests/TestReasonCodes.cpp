@@ -30,7 +30,7 @@ TEST_CASE("reason codes: every code has a unique snake_case name") {
     CHECK(isSnakeCase(name));
     CHECK(seen.insert(name).second);
   }
-  CHECK(seen.size() == 43);
+  CHECK(seen.size() == 44);
   CHECK(reasonCodeName(ReasonCode::Count) == nullptr);
 }
 
@@ -43,6 +43,8 @@ TEST_CASE("reason codes: catalogue names are stable") {
                     "location_invalid_accuracy") == 0);
   CHECK(std::strcmp(reasonCodeName(ReasonCode::UncertaintyModelHeuristic),
                     "uncertainty_model_heuristic") == 0);
+  CHECK(std::strcmp(reasonCodeName(ReasonCode::SimulatedLocationSource),
+                    "simulated_location_source") == 0);
 }
 
 TEST_CASE("reason set: add, contains and merge") {

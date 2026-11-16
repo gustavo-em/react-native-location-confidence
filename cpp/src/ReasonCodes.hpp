@@ -72,6 +72,10 @@ enum class ReasonCode : std::uint8_t {
   MonitoringDurationReached,
   UncertaintyModelHeuristic,
 
+  // Added in phase 3: the app replaced the GPS with readings of its own, for
+  // a demo or a test. Every report built from them says so.
+  SimulatedLocationSource,
+
   Count  // not a reason: only tells how many reasons exist
 };
 

@@ -50,6 +50,7 @@ constexpr const char* REASON_NAMES[] = {
     "motion_conflicting_evidence",
     "monitoring_duration_reached",
     "uncertainty_model_heuristic",
+    "simulated_location_source",
 };
 
 // The build fails here if someone adds a reason to the list in the header

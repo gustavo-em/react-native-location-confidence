@@ -255,6 +255,46 @@ int howSureAsNumber(PhoneActivityConfidence confidence) noexcept {
 // They are announced in PhoneActivityTimeline.hpp.
 // =============================================================================
 
+void PhoneActivityHistory::storeAndForgetTheOldestIfFull(
+    const PhoneActivityReport& report) noexcept {
+  const bool thereIsRoom = (count_ < MAX_STORED_ACTIVITY_REPORTS);
+
+  if (thereIsRoom) {
+    reports_[count_] = report;
+    count_ += 1;
+
+  } else {
+    // Find the report that ended first and put the new one in its place.
+    std::size_t positionOfTheOldest = 0;
+    for (std::size_t position = 1; position < count_; ++position) {
+      if (reports_[position].endedAtMs < reports_[positionOfTheOldest].endedAtMs) {
+        positionOfTheOldest = position;
+      }
+    }
+    reports_[positionOfTheOldest] = report;
+  }
+}
+
+void PhoneActivityHistory::forgetReportsThatEndedBefore(std::int64_t momentMs) noexcept {
+  // Walk the list and keep only the reports that are still useful, moving
+  // them towards the front so no hole is left.
+  std::size_t howManyKept = 0;
+
+  for (std::size_t position = 0; position < count_; ++position) {
+    const bool isStillUseful = (reports_[position].endedAtMs >= momentMs);
+    if (isStillUseful) {
+      reports_[howManyKept] = reports_[position];
+      howManyKept += 1;
+    }
+  }
+
+  // Wipe the slots that are no longer used.
+  for (std::size_t position = howManyKept; position < count_; ++position) {
+    reports_[position] = PhoneActivityReport{};
+  }
+  count_ = howManyKept;
+}
+
 TimeInEachPhoneActivity calculateTimeInEachPhoneActivity(const PhoneActivityHistory& history,
                                                          std::int64_t readingTakenAtMs,
                                                          std::int64_t nowMs) noexcept {
