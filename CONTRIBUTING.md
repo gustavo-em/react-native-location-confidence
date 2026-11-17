@@ -67,6 +67,35 @@ To fix formatting errors, run the following:
 yarn lint --fix
 ```
 
+### Tests
+
+Each layer has its own tests, and none of them needs a phone:
+
+| Layer | Command | What runs |
+|---|---|---|
+| Engine (C++) | `cmake -S cpp -B build/cpp -DLCE_BUILD_TESTS=ON && cmake --build build/cpp && ./build/cpp/lce_tests` | The whole engine, on your computer. Add `-DLCE_SANITIZE=ON` for AddressSanitizer and UndefinedBehaviorSanitizer, and `-DLCE_CXX_STANDARD=20` to build it as C++20. |
+| TypeScript | `yarn test` | Validation, mapper and `AbortSignal`, with a fake native module. |
+| Kotlin | `cd example/android && ./gradlew :react-native-location-confidence:testDebugUnitTest` | The Android coordinator and the JNI bridge on the JVM, with the real engine built for your computer. |
+| Kotlin, on a device | `cd example/android && ./gradlew :react-native-location-confidence:connectedDebugAndroidTest` | The same tests on a phone or an emulator, with the native library exactly as it ships. |
+| Swift | `swift test` | The iOS coordinator and the engine wrapper, on a Mac. |
+
+The Kotlin and the Swift tests are the same scripts in two languages (`android/src/sharedTest` and `ios/Tests`). When you change one, change the other.
+
+A change to the rules of the engine belongs in `cpp/`, never in Kotlin, Swift or TypeScript: those layers only carry values.
+
+### If the iOS example stops linking or crashes at launch
+
+The example uses React Native's prebuilt binaries, which come in a debug and in a release flavor. After a build in one configuration followed by `pod install`, the build scripts may keep the wrong flavor and the app fails to link ("Undefined symbols ... `facebook::react::Sealable`") or crashes at launch ("Symbol not found ... `hermes`"). To make the scripts fetch the right flavor on the next build, write the other configuration in their markers:
+
+```sh
+cd example/ios/Pods
+printf 'Release' > React-Core-prebuilt/.last_build_configuration
+printf 'Release' > hermes-engine/.last_build_configuration
+printf 'Release' > ReactNativeDependencies/.last_build_configuration
+```
+
+Then build the Debug configuration again (use `Debug` in the three files when it is a Release build that fails).
+
 
 
 ### Scripts
