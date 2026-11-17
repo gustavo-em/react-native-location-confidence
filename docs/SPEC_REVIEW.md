@@ -364,10 +364,11 @@ Consequência conhecida para INV-08: por leitura, o score e a incerteza são mon
 | Demonstração | coordenadas inventadas em volta de um ponto fixo público; o simulador só troca a origem das leituras, e o motor decide tudo | plano §2: "modo simulação com fixtures" |
 | Roteiros | código TypeScript (`scenarios.ts`), não arquivos JSON | plano §2 |
 | Mapa | desenhado com Views; nenhum serviço de mapas, chave ou rede | — |
-| Avaliações do simulador | tempo total 1 s, primeira tentativa 0,8 s, sem tempo extra | padrões da §4.2 (12 s, 4,5 s, 7 s) valem na tela "This phone" |
+| Pedidos do simulador | tempo total 1 s, primeira tentativa 0,5 s, sem tempo extra | padrões da §4.2 (12 s, 4,5 s, 7 s) valem na tela "This phone" |
 | Linha do tempo | uma faixa com as últimas respostas (altura = índice, cor = relação) | plano §2: "timeline" |
 | Explicações | o exemplo traduz limites e motivos para frases; os códigos aparecem ao lado | — |
 | Dependência extra | `react-native-safe-area-context`, só no exemplo | — |
+| Idioma | inglês e português, trocados na tela por um seletor no cabeçalho; começa no idioma do aparelho. Códigos de motivo e nomes de limites não são traduzidos. Pedido do owner em 17/11/2026 | não previsto |
 
 ### R-34 [M] iOS: escolhas da Fase 5
 
@@ -415,3 +416,32 @@ Consequência conhecida para INV-08: por leitura, o score e a incerteza são mon
 | D-09 | Nome do pacote | `react-native-location-confidence` |
 
 A SPEC v2.0 não foi editada. Estas decisões prevalecem sobre o texto dela nos pontos indicados em cada R-xx.
+
+## Decisão posterior — aprovada pelo owner em 17/11/2026
+
+### D-10 Nomes: `evaluation` vira `request`, `assessment` vira `report`
+
+**Motivo.** O owner lê o código como falante de português e não reconhecia "evaluation" (avaliação) nem "assessment" (parecer). "Request" (pedido) e "report" (relatório) são palavras que todo desenvolvedor conhece e que se parecem com as do português. A troca foi feita no código inteiro: motor C++, fachada C, Kotlin, Swift, contrato Codegen, API pública em TypeScript, testes e app de exemplo.
+
+**O que diverge da SPEC.** Os nomes públicos da §4.2. O formato do relatório não mudou: os mesmos campos, com os mesmos nomes e valores, e `schemaVersion` continua 1. Mudaram o nome da função, os nomes dos tipos e um valor de opção.
+
+| Camada | Antes | Depois |
+|---|---|---|
+| API pública | `evaluateProximity()` | `getProximityReport()` |
+| API pública | `Assessment`, `AssessmentStatus` | `ProximityReport`, `ReportStatus` |
+| API pública | `EvaluateRequest`, `EvaluateOptions` | `ProximityRequest`, `ProximityOptions` |
+| API pública | `collectionMode: 'evaluations_only'` | `collectionMode: 'requests_only'` |
+| Contrato Codegen | `evaluate()`, `NativeEvaluateRequest`, `NativeAssessment` | `getReport()`, `NativeRequest`, `NativeReport` |
+| Fachada C (`lce.h`) | `lce_start_evaluation`, `lce_cancel_evaluation`, `lce_evaluation_settings` | `lce_start_request`, `lce_cancel_request`, `lce_request_settings` |
+| Motor C++ | `Assessment.hpp/.cpp`, `buildAssessment()` | `Report.hpp/.cpp`, `buildReport()` |
+| Motor C++ | `EvaluationRequest.hpp/.cpp`, `EvaluationSettings` | `ProximityRequest.hpp/.cpp`, `RequestSettings` |
+| Motor C++ | `startEvaluation()`, `cancelEvaluation()`, `collectFinishedEvaluations()` | `startRequest()`, `cancelRequest()`, `collectFinishedRequests()` |
+| Testes do motor | `TestAssessment.cpp`, `TestEvaluationRequest.cpp` | `TestReport.cpp`, `TestProximityRequest.cpp` |
+| Kotlin e Swift | `EvaluationSettings`, `EvaluationStart`, `EngineCoordinator.evaluate()` | `RequestSettings`, `RequestStart`, `EngineCoordinator.startRequest()` |
+| App de exemplo | `AssessmentPanel.tsx`, botão "Evaluate" | `ReportPanel.tsx`, botão "Get report" |
+
+**O que não mudou.** Comportamento, modelo de pontuação, códigos de motivo, valores de `status` e de `source`, e a versão do transporte entre o JavaScript e o nativo. Os mesmos testes passam depois da troca; os comandos e os números estão no adendo do relatório da Fase 8.
+
+**Nada foi publicado**, então não há versão antiga instalada em lugar nenhum e a troca não quebra ninguém.
+
+**Documentos.** A SPEC, o `NATIVE_TRANSPORT_SPEC.md`, as ADRs, o `IMPLEMENTATION_PLAN.md` e os achados R-xx deste arquivo continuam com os nomes antigos: são o registro do que foi proposto e decidido na época. O README, o CHANGELOG e os relatórios de fase usam os nomes novos, porque são o guia de leitura do código.

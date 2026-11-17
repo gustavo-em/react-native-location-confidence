@@ -99,3 +99,42 @@ Do gate da fase no plano: "P0 todos verdes; exceções documentadas; dois dispos
 
 - Os números do índice (pesos, velocidades, limites) nunca foram comparados com dados reais de entrega.
 - No Android não há leitura da atividade do aparelho. Sem ela, e sem velocidade no GPS, a área onde o celular pode estar cresce 45 m por segundo: poucos segundos de silêncio bastam para "inconclusivo". É o comportamento projetado, e vai surpreender quem não ler o README.
+
+## Adendo de 17/11/2026: nomes novos (D-10) e verificação completa
+
+Branch `refactor/request-and-report`, a partir de `phase/8-release`. Nada foi publicado.
+
+**Objetivo.** Trocar `evaluation` por `request` e `assessment` por `report` no código inteiro, a pedido do owner (decisão D-10 em `SPEC_REVIEW.md`, que traz a tabela de nomes), e dar ao app de exemplo a escolha entre inglês e português (relatório da Fase 7).
+
+**Como foi feito.** A troca de nomes foi feita em três commits, um por camada, cada um verificado antes do seguinte: motor C++; fachada C, Kotlin e Swift; contrato Codegen, TypeScript e exemplo. Depois vieram o seletor de idioma, a documentação e os vídeos.
+
+Estado final, tudo a partir deste branch:
+
+| Camada | Comando | Resultado |
+|---|---|---|
+| Motor C++, em C++17, em C++20 e com sanitizers | `cmake --build <dir> && <dir>/lce_tests`, nos três | exit 0 nos três. 354 casos, 498 453 verificações |
+| Espelhos de estudo | `node --experimental-transform-types --no-warnings cpp/src/<Nome>.study.ts`, os seis | exit 0 nos seis |
+| TypeScript | `yarn test` | exit 0. 86 testes |
+| TypeScript | `yarn typecheck`, `yarn lint`, `yarn prepare` | exit 0 nos três (ver a nota) |
+| Kotlin, na JVM | `./gradlew :react-native-location-confidence:testDebugUnitTest --rerun` | exit 0. 35 testes |
+| Kotlin, no emulador | `./gradlew :react-native-location-confidence:connectedDebugAndroidTest` | exit 0. Os mesmos 35 testes (Android 17, arm64) |
+| Swift, no Mac | `swift test` | exit 0. 37 testes |
+| Android, app | `./gradlew :app:assembleRelease` (arm64-v8a, x86_64; R8 ligado) | exit 0 |
+| iOS, app | `xcodebuild` Release para o Simulador | `BUILD SUCCEEDED` |
+| Pacote | `npm pack --dry-run --json --ignore-scripts` | 101 arquivos, 164 KB compactado, nenhum nome antigo |
+
+Nota sobre o lint. Na primeira execução `yarn lint` saiu com erro: seis trechos de `Report.study.ts` e `ProximityRequest.study.ts` ficaram mais curtos com os nomes novos e o formatador pedia para juntar as linhas. Foi corrigido com `yarn lint --fix` (só quebra de linha), os dois espelhos foram executados de novo e `yarn lint` passou.
+
+Os números de testes são os mesmos de antes da troca. Nenhum teste foi removido e nenhuma expectativa mudou: só os nomes.
+
+**Não feito.**
+
+- O build Debug do iOS não foi refeito depois da troca; o Release foi.
+- Aparelho físico, Core Motion real e integração contínua continuam como estavam.
+
+**Riscos.**
+
+- A API pública agora difere da SPEC §4.2. Quem ler a SPEC e depois o código precisa da tabela de D-10.
+- Os documentos da Fase 0 continuam com os nomes antigos, de propósito.
+
+**Sobre o arquivo `Untitled`.** O arquivo solto `android/src/main/cpp/Untitled`, citado acima, não está mais na pasta em 17/11/2026. Ele nunca esteve no git, nem no índice, então nenhum comando de git desta sessão poderia tê-lo apagado. A linha que o exclui do pacote continua no `package.json` e é inofensiva.

@@ -31,7 +31,7 @@ useScenarioPlayer.play(scenario)
   |-- startSession()
   `-- a cada segundo:
         |-- scenario.momentAt(second)        onde o entregador está, o que o GPS "diz"
-        |-- evaluateProximity(...)           1. pergunta: a avaliação fica esperando leitura
+        |-- getProximityReport(...)          1. pergunta: a avaliação fica esperando leitura
         |-- simulation.setPhoneActivity()    2. o que o celular "diz" que está fazendo
         |-- simulation.pushReadings()           e o que o GPS "entrega" (às vezes nada)
         `-- await da resposta                3. mostra: mapa e painel
@@ -65,7 +65,7 @@ O que o motor respondeu no emulador (os números mudam um pouco a cada execuçã
 | `example/src/simulator/useScenarioPlayer.ts` | toca um roteiro contra a biblioteca |
 | `example/src/simulator/StreetMap.tsx` | o mapa, desenhado com Views (sem serviço de mapas, sem chave, sem internet) |
 | `example/src/simulator/SimulatorScreen.tsx` | a tela do simulador |
-| `example/src/components/AssessmentPanel.tsx` | mostra um relatório em palavras: régua do índice, frase, fatos, motivos |
+| `example/src/components/ReportPanel.tsx` | mostra um relatório em palavras: régua do índice, frase, fatos, motivos |
 | `example/src/device/DeviceScreen.tsx` | a tela do GPS real |
 | `docs/demo/` | vídeos e capturas |
 
@@ -100,6 +100,29 @@ As seis situações foram tocadas no emulador (Android 17, arm64) com o build re
 ## Atualização depois da fase 5
 
 O exemplo rodou também no Simulador do iOS (26.1), com o build release, e as seis situações deram as mesmas respostas do Android. Os vídeos e capturas foram regravados nas duas plataformas e estão em `docs/demo/android` e `docs/demo/ios`. Na regravação o salto de GPS ganhou um segundo sem leitura logo depois, para a resposta ficar na tela por mais tempo, e a espera de cada avaliação do simulador caiu de 0,8 s para 0,5 s.
+
+## Atualização de 17/11/2026: inglês e português
+
+Pedido do owner: um seletor no app de exemplo para escolher inglês ou português.
+
+- No cabeçalho, "English | Português". Trocar muda todas as frases na hora e não reinicia nada: a situação continua tocando.
+- O app abre no idioma do aparelho: português se o aparelho está em português, inglês nos outros casos. A escolha feita na tela fica só na memória.
+- Códigos de motivo, nomes de limites e as mensagens de erro da biblioteca não são traduzidos: é o que um desenvolvedor procura do jeito que está escrito.
+- No iOS o app precisa declarar os idiomas que fala. Sem isso o iOS informa "inglês" em qualquer aparelho, e o app não tem como saber que o aparelho está em português. As pastas `en.lproj` e `pt.lproj` fazem essa declaração e traduzem o texto do diálogo de permissão. No Android não é preciso declarar nada.
+
+| Arquivo | Papel |
+|---|---|
+| `example/src/i18n/texts.ts` | todas as frases, nos dois idiomas; uma frase faltando em um idioma é erro de tipo |
+| `example/src/i18n/LanguageContext.tsx` | guarda o idioma escolhido; `useTexts()` entrega as frases a uma tela |
+| `example/src/components/LanguageSwitch.tsx` | o seletor |
+| `example/src/simulator/scenarios.ts` | cada momento passou a dizer só qual frase mostrar (`CaptionId`), não a frase |
+| `example/ios/LocationConfidenceExample/en.lproj`, `pt.lproj` | idiomas declarados ao iOS e texto do diálogo de permissão |
+
+Verificado no emulador Android e no Simulador do iOS, com o build release: troca de idioma no meio de uma situação (a situação seguiu até o fim), as duas telas nos dois idiomas, e o idioma inicial com o app aberto em português (idioma por app no Android; argumentos de inicialização no iOS).
+
+Os vídeos e capturas foram regravados, porque o cabeçalho ganhou o seletor. Há uma pasta nova, `docs/demo/ios-pt`, com o app em português, e `docs/demo/ios/language-switch.mp4` mostra a troca. As respostas do motor são as mesmas nos dois idiomas.
+
+As frases em inglês seguem a decisão D-10 (`SPEC_REVIEW.md`): o botão da tela "This phone" passou de "Evaluate" para "Get report".
 
 ## Riscos e próximo passo
 

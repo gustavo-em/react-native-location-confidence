@@ -7,7 +7,7 @@ Branch `phase/2-models`. A pedido do owner, a fase foi feita em quatro passos, u
 | 2a | Modelo de incerteza (`UncertaintyModel`) | feito |
 | 2b | Detector de saltos (`JumpDetector`; na SPEC, `OutlierDetector`) | feito |
 | 2c | Evidência de movimento (`PhoneActivityTimeline`; na SPEC, `MotionEvidenceAnalyzer`) | feito |
-| 2d | Seletor de candidato e relatório (`ReadingSelection` e `Assessment`; na SPEC, `CandidateSelector` e `evaluateSnapshot`) | feito |
+| 2d | Seletor de candidato e relatório (`ReadingSelection` e `Report`; na SPEC, `CandidateSelector` e `evaluateSnapshot`) | feito |
 
 ---
 
@@ -325,14 +325,14 @@ Data: 16/11/2026.
 Duas perguntas, uma em cada arquivo:
 
 1. `ReadingSelection`: de todas as leituras guardadas, qual usar? (`chooseBestReading`)
-2. `Assessment`: com essa leitura, qual é o relatório? Dentro ou fora do raio, score, status, procedência e razões. (`buildAssessment`)
+2. `Report`: com essa leitura, qual é o relatório? Dentro ou fora do raio, score, status, procedência e razões. (`buildReport`)
 
-`buildAssessment` é o `evaluateSnapshot` da SPEC: trabalha só com o que está na memória em um instante e não espera nada. Esperar leituras novas é a Fase 3.
+`buildReport` é o `evaluateSnapshot` da SPEC: trabalha só com o que está na memória em um instante e não espera nada. Esperar leituras novas é a Fase 3.
 
 ### Ordem das chamadas
 
 ```text
-buildAssessment(history, activityHistory, nowMs, asked, request)        Assessment.cpp
+buildReport(history, activityHistory, nowMs, asked, request)            Report.cpp
   |-- sem permissão de localização?  -> relatório "unavailable" e fim
   |-- chooseBestReading()                                               ReadingSelection.cpp
   |     |-- checkAllReadingsForGpsJumps()                               JumpDetector.cpp   (2b)
@@ -355,13 +355,13 @@ buildAssessment(history, activityHistory, nowMs, asked, request)        Assessme
 - A leitura escolhida é sempre uma leitura medida. Nada é misturado nem interpolado (JMP-020).
 - Procedência (`source`) pelo **número de chegada**: a avaliação guarda qual era o próximo número quando começou e quando entrou no tempo extra. Os campos `obtainedByRequestId` e `obtainedDuring` da Fase 1 saíram: com avaliações simultâneas na mesma sessão, uma leitura não pertence a uma request só.
 - Novo campo `captureTimeWasEstimated` na leitura (hora calculada a partir do relógio de parede, caso do iOS). Vira `ageReliability = estimated` no relatório.
-- Os arquivos se chamam `ReadingSelection` e `Assessment`, pelo critério de nomes simples.
+- Os arquivos se chamam `ReadingSelection` e `Report`, pelo critério de nomes simples.
 
 As hipóteses onde a SPEC é omissa estão em `SPEC_REVIEW.md`, R-29.
 
 ### Arquivos
 
-Criados: `cpp/src/ReadingSelection.hpp`, `cpp/src/ReadingSelection.cpp`, `cpp/src/Assessment.hpp`, `cpp/src/Assessment.cpp`, `cpp/src/ReadingSelection.study.ts`, `cpp/src/Assessment.study.ts`, `cpp/src/NodeRuntime.study.ts`, `cpp/tests/TestReadingSelection.cpp`, `cpp/tests/TestAssessment.cpp`.
+Criados: `cpp/src/ReadingSelection.hpp`, `cpp/src/ReadingSelection.cpp`, `cpp/src/Report.hpp`, `cpp/src/Report.cpp`, `cpp/src/ReadingSelection.study.ts`, `cpp/src/Report.study.ts`, `cpp/src/NodeRuntime.study.ts`, `cpp/tests/TestReadingSelection.cpp`, `cpp/tests/TestReport.cpp`.
 
 Modificados: `cpp/src/Types.hpp` e `cpp/src/ReadingChecker.hpp/.cpp` (campos da leitura), `cpp/src/LocationHistory.hpp` (`arrivalNumberOfNextReading`), `cpp/src/UncertaintyModel.hpp/.cpp` (as duas constantes da opção 2 passaram para o cabeçalho), `cpp/src/PhoneActivityTimeline.hpp/.cpp` (duas perguntas novas para o relatório: `findSinceWhenPhoneActivityIsKnown` e `findPhoneActivityAtMoment`), os três espelhos de estudo existentes, `cpp/tests/TestSupport.hpp`, `cpp/tests/TestUsage.cpp` (os cenários de uso agora passam pelo relatório de verdade, sem ligação manual), `cpp/CMakeLists.txt`, `tsconfig.json`.
 
@@ -371,7 +371,7 @@ Com as peças empilhadas, copiar o código emprestado em cada espelho deixaria o
 
 ```sh
 node --no-warnings --experimental-transform-types cpp/src/ReadingSelection.study.ts
-node --no-warnings --experimental-transform-types cpp/src/Assessment.study.ts
+node --no-warnings --experimental-transform-types cpp/src/Report.study.ts
 ```
 
 ### Comandos executados e resultado
@@ -381,8 +381,8 @@ node --no-warnings --experimental-transform-types cpp/src/Assessment.study.ts
 | 1 | host C++17, `-Werror`, `lce_tests` | 0 | 252 casos, 0 falhas |
 | 2 | host C++20 | 0 | 252 casos, 0 falhas |
 | 3 | host C++17 com ASan + UBSan | 0 | 252 casos, 0 falhas, nenhum aviso dos sanitizers |
-| 4 | 86 mutações isoladas (23 em `ReadingSelection`, 54 em `Assessment`, 9 nas funções novas de `PhoneActivityTimeline`) | — | 86 de 86 detectadas |
-| 5 | espelho `Assessment.study.ts` (que usa os outros quatro) contra o C++: 20.000 casos gerados | 0 | 0 diferenças |
+| 4 | 86 mutações isoladas (23 em `ReadingSelection`, 54 em `Report`, 9 nas funções novas de `PhoneActivityTimeline`) | — | 86 de 86 detectadas |
+| 5 | espelho `Report.study.ts` (que usa os outros quatro) contra o C++: 20.000 casos gerados | 0 | 0 diferenças |
 | 6 | os cinco espelhos rodando sozinhos; `eslint` e `tsc` | 0 | sem erros |
 | 7 | `bob build` (pacote JS) depois da mudança no `tsconfig.json` | 0 | ok |
 
@@ -390,7 +390,7 @@ Sobre as mutações: na primeira rodada, 71 foram detectadas, 4 não foram e 11 
 
 Sobre a comparação com o TypeScript: a coluna da distância até o endereço aceita diferença relativa de 1e-9. Ela passa por `sin`, `cos` e `atan2`, e a biblioteca matemática do C++ e a do JavaScript diferem no último dígito (R-07). Todas as outras colunas (status, procedência, score, tetos, razões, atividade) são idênticas.
 
-A suíte passou de 194 para 252 casos: 23 em `TestReadingSelection` e 35 em `TestAssessment`. Os 7 cenários de uso continuam com os mesmos números; o USE-6 ganhou a checagem de procedência (`cached`, porque a leitura tem 20 s).
+A suíte passou de 194 para 252 casos: 23 em `TestReadingSelection` e 35 em `TestReport`. Os 7 cenários de uso continuam com os mesmos números; o USE-6 ganhou a checagem de procedência (`cached`, porque a leitura tem 20 s).
 
 ### IDs normativos
 

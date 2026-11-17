@@ -1,5 +1,7 @@
 # NATIVE_TRANSPORT_SPEC — contratos de ponte (proposta Fase 0)
 
+> **Nomes.** Este documento é a proposta da Fase 0 e mantém os nomes da época. Desde 17/11/2026 o código usa `getReport`, `NativeRequest` e `NativeReport` no contrato Codegen, e `lce_start_request` na fachada C. A tabela completa está na decisão D-10 de `SPEC_REVIEW.md`.
+
 Cobre o que a SPEC chama de `CodegenCompatibilityReport.md` e `NativeTransportSpec.md`. Os trechos de código são esboços de contrato para revisão, não código de produção.
 
 **Limite desta análise:** os tipos Codegen foram verificados lendo o parser e os geradores de `@react-native/codegen@0.88.1`, não compilando. A SPEC (§4) exige "tipos efetivamente compilados"; isso só fecha no spike (Fase 0.5).

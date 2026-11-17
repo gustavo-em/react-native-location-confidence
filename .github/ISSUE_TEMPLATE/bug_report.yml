@@ -53,7 +53,7 @@ body:
       label: The report you got
       description: |
         Paste `status`, `source`, `evidenceRelation`, `qualityScore`, `scoreBreakdown.appliedCaps`
-        and `diagnostics.reasonCodes` of the assessment.
+        and `diagnostics.reasonCodes` of the report.
 
         **Do not paste real coordinates.** `measuredPosition` and your destination are not needed:
         the reason codes never contain a location. If a position matters, replace it with a made-up one.

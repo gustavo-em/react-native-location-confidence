@@ -10,33 +10,33 @@ Dar ao app um objeto só, `LocationConfidence`, com tipos ricos e erros claros. 
 
 ```text
 app
-  |  LocationConfidence.evaluateProximity({ destination, radiusMeters, options, signal })
+  |  LocationConfidence.getProximityReport({ destination, radiusMeters, options, signal })
   v
 LocationConfidence.ts
-  |-- checkEvaluateRequest()            validation.ts   lança InvalidArgumentError; nada nativo ainda
+  |-- checkProximityRequest()           validation.ts   lança InvalidArgumentError; nada nativo ainda
   |-- checkSignal()
   |-- makeRequestId()                   "lc-1-k3f9x2"
   |
   |-- o sinal já estava abortado?
-  |     `-- assessmentCancelledBeforeItStarted()        mapper.ts   responde aqui, sem chamar o nativo
+  |     `-- reportCancelledBeforeItStarted()            mapper.ts   responde aqui, sem chamar o nativo
   |
-  |-- native.evaluate(requestId, request)               Kotlin / Swift
+  |-- native.getReport(requestId, request)              Kotlin / Swift
   |     (se o app abortar no meio: native.cancelRequest(requestId))
-  `-- toAssessment(requestId, nativeAssessment)         mapper.ts   números do motor -> textos públicos
+  `-- toProximityReport(requestId, nativeReport)        mapper.ts   números do motor -> textos públicos
 ```
 
 Um exemplo, do começo ao fim:
 
 ```text
-evaluateProximity({ destination: { latitude: 0, longitude: 0 }, radiusMeters: 100 })
+getProximityReport({ destination: { latitude: 0, longitude: 0 }, radiusMeters: 100 })
 
-  checkEvaluateRequest  ->  { sessionId: null, latitude: 0, longitude: 0, radiusMeters: 100,
-                              totalDeadlineMs: 12000, initialFixBudgetMs: 4500, recoveryWindowMs: 7000,
-                              maxFreshAgeMs: 10000, maxFallbackAgeMs: 60000, ... }
-  native.evaluate       ->  { transportVersion: 2, status: 0, source: 0, evidenceRelation: 0,
-                              qualityScore: 75, appliedCaps: ['single_fix'], ... }
-  toAssessment          ->  { status: 'available', source: 'fresh', evidenceRelation: 'supports_inside',
-                              qualityScore: 75, probabilityWithinRadius: null, ... }
+  checkProximityRequest  ->  { sessionId: null, latitude: 0, longitude: 0, radiusMeters: 100,
+                               totalDeadlineMs: 12000, initialFixBudgetMs: 4500, recoveryWindowMs: 7000,
+                               maxFreshAgeMs: 10000, maxFallbackAgeMs: 60000, ... }
+  native.getReport       ->  { transportVersion: 2, status: 0, source: 0, evidenceRelation: 0,
+                               qualityScore: 75, appliedCaps: ['single_fix'], ... }
+  toProximityReport      ->  { status: 'available', source: 'fresh', evidenceRelation: 'supports_inside',
+                               qualityScore: 75, probabilityWithinRadius: null, ... }
 ```
 
 ## Arquivos

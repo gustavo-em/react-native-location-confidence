@@ -61,7 +61,7 @@ Rebuild the app after installing.
 
 ## Permissions
 
-The library never asks for a permission by itself. Opening a session or evaluating never shows a dialog. The dialog appears only when your app calls `requestLocationPermission()` (or `requestMotionPermission()`).
+The library never asks for a permission by itself. Opening a session or asking for a report never shows a dialog. The dialog appears only when your app calls `requestLocationPermission()` (or `requestMotionPermission()`).
 
 ### Android
 
@@ -106,28 +106,28 @@ if (!authorization.locationGranted) {
   await LocationConfidence.requestLocationPermission();
 }
 
-const assessment = await LocationConfidence.evaluateProximity({
+const report = await LocationConfidence.getProximityReport({
   destination: { latitude: -23.55052, longitude: -46.633308 },
   radiusMeters: 100,
 });
 
-assessment.qualityScore; // 75        an index from 0 to 100, not a percentage
-assessment.evidenceRelation; // 'supports_inside' | 'supports_outside' | 'inconclusive'
-assessment.status; // 'available' | 'degraded' | 'unavailable' | 'cancelled'
-assessment.diagnostics.reasonCodes; // ['uncertainty_model_heuristic']
+report.qualityScore; // 75        an index from 0 to 100, not a percentage
+report.evidenceRelation; // 'supports_inside' | 'supports_outside' | 'inconclusive'
+report.status; // 'available' | 'degraded' | 'unavailable' | 'cancelled'
+report.diagnostics.reasonCodes; // ['uncertainty_model_heuristic']
 ```
 
-An evaluation turns the GPS on, waits for a reading that is good enough (12 seconds at most, by default), turns the GPS off and answers. It always answers, and always once.
+A request turns the GPS on, waits for a reading that is good enough (12 seconds at most, by default), turns the GPS off and answers. It always answers, and always once.
 
 ### With a session
 
-A single reading has nothing to confirm it, so its index stops at 75. A session remembers the last 10 readings, which lets later evaluations compare readings with each other, notice a GPS jump, and still answer when the GPS is slow.
+A single reading has nothing to confirm it, so its index stops at 75. A session remembers the last 10 readings, which lets later requests compare readings with each other, notice a GPS jump, and still answer when the GPS is slow.
 
 ```ts
 const session = await LocationConfidence.startSession();
 
 try {
-  const assessment = await LocationConfidence.evaluateProximity({
+  const report = await LocationConfidence.getProximityReport({
     sessionId: session.id,
     destination,
     radiusMeters: 100,
@@ -138,7 +138,7 @@ try {
 }
 ```
 
-By default a session only remembers the readings its own evaluations obtained, and opening it turns nothing on. To have readings ready before the first evaluation, ask the session to keep collecting while the app is on the screen:
+By default a session only remembers the readings its own requests obtained, and opening it turns nothing on. To have readings ready before the first request, ask the session to keep collecting while the app is on the screen:
 
 ```ts
 const session = await LocationConfidence.startSession({
@@ -156,7 +156,7 @@ Collecting uses more battery, needs the location permission, stops by itself aft
 ```ts
 const controller = new AbortController();
 
-const pending = LocationConfidence.evaluateProximity({
+const pending = LocationConfidence.getProximityReport({
   destination,
   radiusMeters: 100,
   signal: controller.signal,
@@ -164,11 +164,11 @@ const pending = LocationConfidence.evaluateProximity({
 
 controller.abort();
 
-const assessment = await pending;
-assessment.status; // 'cancelled'
+const report = await pending;
+report.status; // 'cancelled'
 ```
 
-A cancelled evaluation still resolves, with `status: 'cancelled'`. It is not an error.
+A cancelled request still resolves, with `status: 'cancelled'`. It is not an error.
 
 ## API
 
@@ -182,20 +182,20 @@ LocationConfidence.startSession(options?): Promise<Session>
 LocationConfidence.clearHistory(sessionId): Promise<void>
 LocationConfidence.stopSession(sessionId): Promise<void>
 
-LocationConfidence.evaluateProximity(request): Promise<Assessment>
+LocationConfidence.getProximityReport(request): Promise<ProximityReport>
 
 LocationConfidence.simulation // see "Simulation"
 ```
 
 `getCapabilities()` and `getAuthorization()` only read. They show no dialog and never turn the GPS on.
 
-### Options of an evaluation
+### Options of a request
 
 Every measure carries its unit in the name: `Meters`, `Ms` (milliseconds), `Mps` (meters per second).
 
 | Option | Default | Allowed | Meaning |
 |---|---|---|---|
-| `totalDeadlineMs` | 12000 | 1000 to 60000 | The whole evaluation never takes longer than this. |
+| `totalDeadlineMs` | 12000 | 1000 to 60000 | The whole request never takes longer than this. |
 | `initialFixBudgetMs` | 4500 | 0 to the total | How long the first attempt waits. |
 | `recoveryWindowMs` | 7000 | 0 to 20000 | How long the extra time lasts. 0: no extra time. |
 | `maxFreshAgeMs` | 10000 | 0 to 120000 | A reading up to this old counts as obtained now. |
@@ -226,7 +226,7 @@ Every measure carries its unit in the name: `Meters`, `Ms` (milliseconds), `Mps`
 | `permissionPrecision` | `precise`, `approximate` or `unknown`. |
 | `motion` | What is known about the activity of the phone, not of the person. |
 | `scoreBreakdown` | The four grades, the score before the limits, and the limits that applied. |
-| `diagnostics` | `reasonCodes`, the steps of the evaluation, counts of readings, the duration, and `simulatedLocationReported`. |
+| `diagnostics` | `reasonCodes`, the steps of the request, counts of readings, the duration, and `simulatedLocationReported`. |
 
 `diagnostics.simulatedLocationReported` is `true` when the system marked the reading as simulated, `false` when it did not (which proves nothing) and `null` when the system said nothing.
 
@@ -315,9 +315,9 @@ A high index with `supports_outside` is normal: it means the evidence that the p
 | `suspected_gps_jump` | Readings in memory contradict each other. |
 | `possible_mock_location` | The system marked the reading as simulated. |
 | `motion_unavailable`, `motion_permission_denied` | The phone's activity was not used. |
-| `request_cancelled`, `app_backgrounded`, `session_stopped` | Why the evaluation was cancelled. |
+| `request_cancelled`, `app_backgrounded`, `session_stopped` | Why the request was cancelled. |
 | `unknown_session` | That session id is not open. |
-| `busy` | Too many evaluations are running (16 at most, 4 per session). |
+| `busy` | Too many requests are running (16 at most, 4 per session). |
 | `monitoring_duration_reached` | The session stopped collecting because its time was over. |
 | `uncertainty_model_heuristic` | Always present with a reading: the distances come from assumed speeds. |
 | `simulated_location_source` | The readings came from the simulation below, not from the GPS. |
@@ -329,14 +329,14 @@ For demos and tests your app can replace the GPS with readings of its own:
 ```ts
 await LocationConfidence.simulation.enable();
 
-const pending = LocationConfidence.evaluateProximity({ destination, radiusMeters: 100 });
+const pending = LocationConfidence.getProximityReport({ destination, radiusMeters: 100 });
 
 await LocationConfidence.simulation.pushReadings([
   { latitude: -23.5503, longitude: -46.6333, accuracyMeters: 8 },
 ]);
 await LocationConfidence.simulation.setPhoneActivity('stationary');
 
-const assessment = await pending;
+const report = await pending;
 
 await LocationConfidence.simulation.disable();
 ```
@@ -371,7 +371,7 @@ While it is enabled the real GPS is never used and no permission is needed. Ever
 |---|---|
 | `native_module_missing` | Rebuild the app. On iOS run `pod install` first. Expo Go cannot load the library. |
 | `native_version_mismatch` | The JavaScript and the native code are from different versions: rebuild the app. |
-| `status: 'unavailable'` with `permission_not_determined` | Call `requestLocationPermission()` first. Evaluating never asks. |
+| `status: 'unavailable'` with `permission_not_determined` | Call `requestLocationPermission()` first. A request never asks for it. |
 | The index is always 75 | A single reading stops there. Use a session. |
 | The index is 0 in the iOS Simulator | The Simulator's locations are marked as simulated. See the iOS notes. |
 | `inconclusive` a few seconds after a good reading | Nothing told the engine how the phone moved, so the area where it could be grew past the radius. A session, the phone's activity (iOS), or a lower `maxPlausibleSpeedMps` keep it smaller. |
@@ -384,7 +384,7 @@ yarn
 yarn example android   # or: yarn example ios
 ```
 
-The first screen plays six made-up situations against the real engine: a courier arriving, a GPS jump, the signal lost, the signal lost while the phone reports it stands still, a fake-GPS app, and approximate location only. The second screen uses the real GPS of the phone.
+The first screen plays six made-up situations against the real engine: a courier arriving, a GPS jump, the signal lost, the signal lost while the phone reports it stands still, a fake-GPS app, and approximate location only. The second screen uses the real GPS of the phone. A switch at the top shows the app in English or in Portuguese.
 
 ## Development
 

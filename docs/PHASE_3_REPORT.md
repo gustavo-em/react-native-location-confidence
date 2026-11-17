@@ -8,7 +8,7 @@ Fechar o core C++: tudo o que a plataforma (Kotlin/Swift) precisa para funcionar
 
 | Peça | Arquivos | Na SPEC |
 |---|---|---|
-| Uma avaliação, do pedido à resposta | `EvaluationRequest.hpp/.cpp` | `RecoveryPolicy` |
+| Uma avaliação, do pedido à resposta | `ProximityRequest.hpp/.cpp` | `RecoveryPolicy` |
 | O motor: sessões, avaliações em curso, atividade do celular | `Engine.hpp/.cpp` | `LocationEngine` |
 | A porta de entrada em C | `cpp/include/location_confidence/lce.h`, `CFacade.cpp` | fachada C (ADR-013) |
 
@@ -17,21 +17,21 @@ Fechar o core C++: tudo o que a plataforma (Kotlin/Swift) precisa para funcionar
 ```text
 plataforma (Kotlin / Swift)
   |
-  |  lce_start_evaluation()            lce_readings_arrived()        lce_time_passed()   ...
+  |  lce_start_request()               lce_readings_arrived()        lce_time_passed()   ...
   v
 CFacade.cpp          só traduz: struct C <-> tipos C++
   v
 Engine.cpp
-  |-- startEvaluation()
-  |     `-- request.start()                               EvaluationRequest.cpp
+  |-- startRequest()
+  |     `-- request.start()                               ProximityRequest.cpp
   |-- whenReadingsArrive()
   |     |-- checkReading()                                ReadingChecker.cpp   (fase 1)
   |     |-- storeOneReading() -> history.store()          LocationHistory.cpp  (fase 1)
   |     `-- request.whenReadingsArrive()
-  |           `-- buildAssessment()                       Assessment.cpp       (fase 2)
+  |           `-- buildReport()                           Report.cpp           (fase 2)
   |-- whenTimePasses()
   |     `-- request.whenTimePasses()
-  `-- collectFinishedEvaluations()     o relatório vai para a lista de espera
+  `-- collectFinishedRequests()        o relatório vai para a lista de espera
 
 depois de CADA chamada, a plataforma pergunta e obedece:
   lce_take_finished_report()             há relatório pronto? entrega ao app
@@ -82,7 +82,7 @@ Outras decisões estão em `SPEC_REVIEW.md`, R-30. As principais:
 
 ## Arquivos
 
-Criados: `cpp/src/EvaluationRequest.hpp`, `cpp/src/EvaluationRequest.cpp`, `cpp/src/Engine.hpp`, `cpp/src/Engine.cpp`, `cpp/src/EvaluationRequest.study.ts`, `cpp/tests/TestEvaluationRequest.cpp`, `cpp/tests/TestEngine.cpp`, `docs/PHASE_3_REPORT.md`.
+Criados: `cpp/src/ProximityRequest.hpp`, `cpp/src/ProximityRequest.cpp`, `cpp/src/Engine.hpp`, `cpp/src/Engine.cpp`, `cpp/src/ProximityRequest.study.ts`, `cpp/tests/TestProximityRequest.cpp`, `cpp/tests/TestEngine.cpp`, `docs/PHASE_3_REPORT.md`.
 
 Reescritos: `cpp/include/location_confidence/lce.h`, `cpp/src/CFacade.cpp`, `cpp/tests/TestFacade.cpp`.
 
@@ -102,14 +102,14 @@ Modificados: `cpp/src/ReasonCodes.hpp/.cpp` (código novo), `cpp/src/PhoneActivi
 | 2 | host C++20 | 0 | 354 casos, 0 falhas |
 | 3 | host C++17 com ASan + UBSan | 0 | 354 casos, 0 falhas, nenhum aviso dos sanitizers |
 | 4 | 330 mutações (94 na avaliação, 106 no motor, 130 na fachada) | — | 327 detectadas, 3 equivalentes |
-| 5 | espelho `EvaluationRequest.study.ts` contra o C++: 10.000 avaliações geradas | 0 | 0 diferenças |
+| 5 | espelho `ProximityRequest.study.ts` contra o C++: 10.000 avaliações geradas | 0 | 0 diferenças |
 | 6 | os seis espelhos rodando sozinhos; `eslint` e `tsc` | 0 | sem erros |
 
 Sobre as mutações: na primeira rodada, 317 foram detectadas, 9 não compilaram (deixavam função sem uso, e o build usa `-Werror`) e 4 não foram detectadas. As 9 foram reescritas e passaram a ser detectadas. Das 4, uma virou checagem nova (a precisão da permissão no relatório de avaliação interrompida). As outras 3 são equivalentes: a fachada confere se o número de um texto está na lista, e a função do core que ela chama confere de novo; tirar uma das duas checagens não muda nada. As duas ficam.
 
 Antes de rodar as mutações, a lista em si mostrou lacunas, que viraram testes: leitura lembrada imprecisa, simulada ou suspeita não encurta a espera; atividade anterior a uma mudança é lembrada; atividade de confiança média não diminui a distância; background encerra o que se sabe da atividade; leitura com hora ligeiramente no futuro é usada e avisada; leitura que já chega com mais de 2 minutos não é guardada; e um teste por campo da fachada.
 
-A suíte passou de 252 para 354 casos: 34 em `TestEvaluationRequest`, 47 em `TestEngine` e 22 em `TestFacade` (que tinha 1).
+A suíte passou de 252 para 354 casos: 34 em `TestProximityRequest`, 47 em `TestEngine` e 22 em `TestFacade` (que tinha 1).
 
 O executor de mutações ganhou uma versão rápida: cada trabalhador compila uma cópia inteira uma vez e, a cada mutação, recompila só o que depende do arquivo alterado. Para não testar binário velho, ele confere que o executável de teste é mais novo que a alteração.
 
@@ -133,7 +133,7 @@ Ficam para as fases de plataforma: REC-020, 023, 024 (comportamento das APIs do 
 
 - **TSan no teste de fachada**, previsto no plano. O motor é de uma thread só por contrato e a fachada não tem estado global, então não há o que o TSan observar em host. O confinamento a uma fila é da plataforma e é testado lá (CON-023).
 - **Fixtures em JSON e nlohmann/json**, previstos no plano. Os roteiros são código C++ nos testes. O cenário dourado é repetido à mão nos testes de cada plataforma.
-- **Espelho de estudo do `Engine` e da fachada.** A fachada só traduz valores. O motor é principalmente organização (listas de sessões e de avaliações); o desenho da ordem das chamadas e os três exemplos estão no topo de `Engine.cpp`. O espelho da avaliação (`EvaluationRequest.study.ts`) existe e foi conferido contra o C++.
+- **Espelho de estudo do `Engine` e da fachada.** A fachada só traduz valores. O motor é principalmente organização (listas de sessões e de avaliações); o desenho da ordem das chamadas e os três exemplos estão no topo de `Engine.cpp`. O espelho da avaliação (`ProximityRequest.study.ts`) existe e foi conferido contra o C++.
 - Android e iOS ainda não chamam nada disso. O que está commitado neste branch compila nas duas plataformas (elas só usam `lce_abi_version`), mas a tela do exemplo passa a mostrar versão 2.
 
 ## Riscos e próximo passo

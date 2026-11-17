@@ -1,7 +1,7 @@
 {
   "name": "react-native-location-confidence",
   "version": "0.1.0",
-  "description": "Location evidence quality assessment for foreground delivery proximity checks",
+  "description": "Location evidence quality report for foreground delivery proximity checks",
   "main": "./lib/module/index.js",
   "types": "./lib/typescript/src/index.d.ts",
   "exports": {

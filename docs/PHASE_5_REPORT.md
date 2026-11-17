@@ -10,7 +10,7 @@ Ligar o mesmo motor C++ ao iPhone. O lado iOS é um gêmeo do lado Android: os m
 
 ```text
 JavaScript
-  |  NativeLocationConfidence.evaluate(requestId, request)
+  |  NativeLocationConfidence.getReport(requestId, request)
   v
 LocationConfidence.mm            Objective-C++: recebe os tipos gerados pelo React Native (que são C++)
   |                              e os transforma em dicionários
@@ -24,9 +24,9 @@ CoreEngine.swift                 tipos Swift <-> structs de lce.h
 o motor C++                      todas as decisões
 ```
 
-No Android, entre o Kotlin e o motor há dois arquivos (`CoreEngine.kt` e `JniBindings.cpp`) e os valores atravessam como listas de números, porque o Kotlin não lê um struct de C. O Swift lê: `CoreEngine.swift` preenche `lce_evaluation_settings` e lê `lce_report` campo a campo, sem lista e sem número de conferência.
+No Android, entre o Kotlin e o motor há dois arquivos (`CoreEngine.kt` e `JniBindings.cpp`) e os valores atravessam como listas de números, porque o Kotlin não lê um struct de C. O Swift lê: `CoreEngine.swift` preenche `lce_request_settings` e lê `lce_report` campo a campo, sem lista e sem número de conferência.
 
-Por que existe um arquivo `.mm`: o React Native gera, para os argumentos, tipos em C++ (`JS::NativeLocationConfidence::NativeEvaluateRequest`). O Swift não enxerga C++. O `.mm` é a única coisa que enxerga os dois lados, e não faz mais nada além de converter.
+Por que existe um arquivo `.mm`: o React Native gera, para os argumentos, tipos em C++ (`JS::NativeLocationConfidence::NativeRequest`). O Swift não enxerga C++. O `.mm` é a única coisa que enxerga os dois lados, e não faz mais nada além de converter.
 
 ## Arquivos
 

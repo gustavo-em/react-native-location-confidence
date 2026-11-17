@@ -10,13 +10,13 @@ Ligar o motor C++ ao Android de verdade: o JavaScript chama o módulo Kotlin, o 
 
 ```text
 JavaScript
-  |  NativeLocationConfidence.evaluate(requestId, request)
+  |  NativeLocationConfidence.getReport(requestId, request)
   v
 LocationConfidenceModule.kt      traduz: objeto JS <-> objetos Kotlin; monta as peças uma vez
   v
 EngineCoordinator.kt             fala com o motor e depois OBEDECE o motor
   |
-  |   1. conta ao motor o que aconteceu     engine.startEvaluation / readingsArrived / timePassed ...
+  |   1. conta ao motor o que aconteceu     engine.startRequest / readingsArrived / timePassed ...
   |   2. obeyTheEngine()
   |        |-- takeFinishedReport()   repete até não haver mais; entrega cada um a quem pediu
   |        `-- whatThePlatformMustDoNow()

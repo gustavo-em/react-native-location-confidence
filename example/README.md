@@ -15,7 +15,9 @@ Two screens, one library.
 
 The map is drawn with plain Views: no map service, no key, no internet. Every coordinate is made up and the real GPS stays off.
 
-**This phone.** The same library with the real GPS: read the permissions, ask for the location, open a session, evaluate, cancel.
+**This phone.** The same library with the real GPS: read the permissions, ask for the location, open a session, get a report, cancel.
+
+**English or Português.** The switch at the top changes every sentence of the app, and a situation keeps playing while you switch. The app starts in the language of the phone. Reason codes and the names of the limits (for example `single_fix`) stay as the library writes them, because that is what a developer searches for.
 
 ## Running it
 
@@ -46,7 +48,11 @@ yarn example ios
 | `src/simulator/scenarios.ts` | The scripts of the six situations. |
 | `src/simulator/useScenarioPlayer.ts` | Plays a script against the library, one second at a time. |
 | `src/simulator/StreetMap.tsx` | The map. |
-| `src/components/AssessmentPanel.tsx` | Shows a report in plain words. |
+| `src/components/ReportPanel.tsx` | Shows a report in plain words. |
 | `src/device/DeviceScreen.tsx` | The screen for the real GPS. |
+| `src/i18n/texts.ts` | Every sentence of the app, in English and in Portuguese. |
+| `src/i18n/LanguageContext.tsx` | Keeps the chosen language and hands the sentences to the screens. |
+| `src/components/LanguageSwitch.tsx` | The switch between English and Português. |
+| `ios/LocationConfidenceExample/en.lproj`, `pt.lproj` | Tell iOS that the app speaks both languages, and translate the text of the permission dialog. Without them iOS reports English on every phone. |
 
 Recordings of the simulator are in [`docs/demo`](../docs/demo).
