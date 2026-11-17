@@ -25,6 +25,11 @@ if (project.extensions.findByName("kotlin") == null) {
 
 apply plugin: "com.facebook.react"
 
+// The tests of the library are not part of the npm package. In an app that
+// installed the library this is false, and nothing about tests is set up:
+// the app's own `./gradlew test` must not try to build or run them.
+def testsOfTheLibraryArePresent = file("src/sharedTest/java").exists()
+
 android {
   namespace "com.locationconfidence"
 
@@ -57,14 +62,16 @@ android {
     }
   }
 
-  sourceSets {
-    // The same tests run in two places:
-    //   - on this computer's JVM, with the engine built for the computer
-    //     (./gradlew testDebugUnitTest);
-    //   - on a phone or an emulator, with the engine exactly as it ships
-    //     (./gradlew connectedDebugAndroidTest).
-    test.java.srcDirs += "src/sharedTest/java"
-    androidTest.java.srcDirs += "src/sharedTest/java"
+  if (testsOfTheLibraryArePresent) {
+    sourceSets {
+      // The same tests run in two places:
+      //   - on this computer's JVM, with the engine built for the computer
+      //     (./gradlew testDebugUnitTest);
+      //   - on a phone or an emulator, with the engine exactly as it ships
+      //     (./gradlew connectedDebugAndroidTest).
+      test.java.srcDirs += "src/sharedTest/java"
+      androidTest.java.srcDirs += "src/sharedTest/java"
+    }
   }
 }
 
@@ -87,9 +94,11 @@ dependencies {
   // Tells when the whole app goes to the background and comes back.
   implementation "androidx.lifecycle:lifecycle-process:2.8.7"
 
-  testImplementation "junit:junit:4.13.2"
-  androidTestImplementation "junit:junit:4.13.2"
-  androidTestImplementation "androidx.test:runner:1.6.2"
+  if (testsOfTheLibraryArePresent) {
+    testImplementation "junit:junit:4.13.2"
+    androidTestImplementation "junit:junit:4.13.2"
+    androidTestImplementation "androidx.test:runner:1.6.2"
+  }
 }
 
 // --- Unit tests with the real engine, on this computer -----------------------
@@ -99,32 +108,34 @@ dependencies {
 // first built for the computer (see src/test/cpp/CMakeLists.txt) and the
 // tests are told where to find it.
 
-def hostJniBuildDir = layout.buildDirectory.dir("host-jni").get().asFile
+if (testsOfTheLibraryArePresent) {
+  def hostJniBuildDir = layout.buildDirectory.dir("host-jni").get().asFile
 
-tasks.register("configureHostJniLibrary", Exec) {
-  description = "Prepares the build of the JNI library for this computer."
-  inputs.file("src/test/cpp/CMakeLists.txt")
-  outputs.file(new File(hostJniBuildDir, "CMakeCache.txt"))
-  commandLine "cmake", "-S", file("src/test/cpp").absolutePath, "-B", hostJniBuildDir.absolutePath,
-      "-DCMAKE_BUILD_TYPE=Release"
-}
+  tasks.register("configureHostJniLibrary", Exec) {
+    description = "Prepares the build of the JNI library for this computer."
+    inputs.file("src/test/cpp/CMakeLists.txt")
+    outputs.file(new File(hostJniBuildDir, "CMakeCache.txt"))
+    commandLine "cmake", "-S", file("src/test/cpp").absolutePath, "-B", hostJniBuildDir.absolutePath,
+        "-DCMAKE_BUILD_TYPE=Release"
+  }
 
-tasks.register("buildHostJniLibrary", Exec) {
-  description = "Builds the JNI library for this computer, for the unit tests."
-  dependsOn "configureHostJniLibrary"
-  inputs.dir("src/main/cpp")
-  inputs.dir("../cpp/src")
-  inputs.dir("../cpp/include")
-  outputs.dir(hostJniBuildDir)
-  commandLine "cmake", "--build", hostJniBuildDir.absolutePath, "--parallel"
-}
+  tasks.register("buildHostJniLibrary", Exec) {
+    description = "Builds the JNI library for this computer, for the unit tests."
+    dependsOn "configureHostJniLibrary"
+    inputs.dir("src/main/cpp")
+    inputs.dir("../cpp/src")
+    inputs.dir("../cpp/include")
+    outputs.dir(hostJniBuildDir)
+    commandLine "cmake", "--build", hostJniBuildDir.absolutePath, "--parallel"
+  }
 
-tasks.withType(Test).configureEach {
-  dependsOn "buildHostJniLibrary"
-  // Where System.loadLibrary("location-confidence") looks during the tests.
-  systemProperty "java.library.path", hostJniBuildDir.absolutePath
-  testLogging {
-    events "failed", "skipped"
-    exceptionFormat "full"
+  tasks.withType(Test).configureEach {
+    dependsOn "buildHostJniLibrary"
+    // Where System.loadLibrary("location-confidence") looks during the tests.
+    systemProperty "java.library.path", hostJniBuildDir.absolutePath
+    testLogging {
+      events "failed", "skipped"
+      exceptionFormat "full"
+    }
   }
 }
