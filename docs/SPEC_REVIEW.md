@@ -369,6 +369,24 @@ Consequência conhecida para INV-08: por leitura, o score e a incerteza são mon
 | Explicações | o exemplo traduz limites e motivos para frases; os códigos aparecem ao lado | — |
 | Dependência extra | `react-native-safe-area-context`, só no exemplo | — |
 
+### R-34 [M] iOS: escolhas da Fase 5
+
+| Ponto | Escolha | Onde a SPEC ou a Fase 0 dizia outra coisa |
+|---|---|---|
+| Como o Swift fala com o motor | lê os structs de `lce.h` diretamente; não há wrapper Objective-C++ entre o Swift e o core | §3.5 (`LocationConfidenceCxxAdapter.mm`); D-08 previa esse wrapper só como plano B |
+| Papel do `.mm` | só converte os tipos C++ gerados pelo Codegen em dicionários e chama o Swift | §3.5 |
+| Coordenação e concorrência | as mesmas do Android (R-31): um coordenador, uma fila serial | §3.5 |
+| Hora da leitura | calculada a partir do relógio de parede e marcada como estimada; `ageReliability` é sempre `estimated` no iOS | R-14 |
+| Relógio | `CLOCK_MONOTONIC`, que continua contando com o aparelho dormindo | R-14 |
+| Intervalo de leituras | não existe no iOS; o motor guarda uma leitura a cada `monitoringIntervalMs` | R-09 |
+| Motion | fluxo ao vivo (`startActivityUpdates`); nenhuma consulta ao histórico | §5.2, PLT-026 |
+| Permissão de motion | o sensor só é usado quando a permissão já existe; o diálogo aparece só em `requestMotionPermission`, que faz uma consulta vazia para provocá-lo | PLT-025 |
+| Dois estados de movimento ao mesmo tempo | vale o que permite o movimento mais rápido | não previsto |
+| Sinal de mock | `CLLocationSourceInformation.isSimulatedBySoftware`; ausente vira "desconhecido" | PLT-022, PLT-023 |
+| `Info.plist` sem o texto de localização | `requestLocationPermission` rejeita com `missing_usage_description` em vez de nunca responder | não previsto |
+| Testes | `swift test` no Mac, por um `Package.swift` que não é distribuído; os mesmos roteiros do Kotlin | plano §3 previa XCTest com o app |
+| Manifesto de privacidade | `PrivacyInfo.xcprivacy` no pod: sem rastreio, sem dado coletado, motivo `35F9.1` para o relógio | R-14 |
+
 ## Decisões — aprovadas pelo owner em 14/11/2026
 
 | ID | Decisão | Resultado |

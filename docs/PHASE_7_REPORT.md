@@ -37,7 +37,7 @@ useScenarioPlayer.play(scenario)
         `-- await da resposta                3. mostra: mapa e painel
 ```
 
-Cada avaliação do simulador espera no máximo 0,8 s por uma leitura e não usa tempo extra, para a tela acompanhar a situação de perto.
+Cada avaliação do simulador espera no máximo 0,5 s por uma leitura e não usa tempo extra, para a tela acompanhar a situação de perto.
 
 ## As seis situações
 
@@ -46,7 +46,7 @@ O que o motor respondeu no emulador (os números mudam um pouco a cada execuçã
 | Situação | O que o simulador faz | O que o motor responde |
 |---|---|---|
 | Arriving | entregador vem de moto e estaciona a 30 m | fora (97) → inconclusivo na borda do raio → dentro (97) |
-| GPS jump | uma leitura cai a 340 m | a leitura não é usada: responde com a anterior, da memória (60, `cached` e `conflicting_evidence`, motivo `suspected_gps_jump`); depois 75 enquanto a leitura estranha contradiz as novas; depois 97 |
+| GPS jump | uma leitura cai a 340 m, seguida de um segundo sem leitura | a leitura não é usada: responde com a anterior, da memória (60, `cached` e `conflicting_evidence`, motivo `suspected_gps_jump`); depois 75 enquanto a leitura estranha contradiz as novas; depois 97 |
 | Signal lost | o GPS para de entregar | da memória (60); a área onde o celular pode estar cresce; passa a inconclusivo; 35 quando a área chega a 100 m e 15 quando chega a 300 m |
 | Lost, standing still | igual, mas o celular informa que está parado | continua "dentro" com 60: depois de 16 s a área é de 16 m |
 | Fake GPS | entregador a 150 m; leituras na porta, marcadas como mock | 0, inconclusivo, `possible_mock_location` |
@@ -93,13 +93,16 @@ As seis situações foram tocadas no emulador (Android 17, arm64) com o build re
 
 ## Não feito
 
-- **iOS.** O exemplo é o mesmo código nas duas plataformas, mas só rodou no Android. Depende da fase 5.
 - **Aparelho físico.**
 - **Roteiros em arquivo JSON.** São código TypeScript (`scenarios.ts`).
-- **Gravação fluida.** Os vídeos têm cerca de 10 quadros por segundo: é o que o gravador do emulador entrega. `docs/demo/README.md` diz como regravar.
+- **Gravação fluida no Android.** Os vídeos do Android têm cerca de 10 quadros por segundo: é o que o gravador do emulador entrega. Os do iOS são fluidos. `docs/demo/README.md` diz como regravar.
+
+## Atualização depois da fase 5
+
+O exemplo rodou também no Simulador do iOS (26.1), com o build release, e as seis situações deram as mesmas respostas do Android. Os vídeos e capturas foram regravados nas duas plataformas e estão em `docs/demo/android` e `docs/demo/ios`. Na regravação o salto de GPS ganhou um segundo sem leitura logo depois, para a resposta ficar na tela por mais tempo, e a espera de cada avaliação do simulador caiu de 0,8 s para 0,5 s.
 
 ## Riscos e próximo passo
 
 - A dependência `react-native-safe-area-context` entrou só no exemplo.
 - No build de desenvolvimento em Android 17 o React Native pede a permissão de rede local para falar com o Metro. O diálogo não é da biblioteca e não aparece no build release.
-- Próximo: iOS (fase 5).
+- Próximo: iOS (fase 5), concluída em seguida.
