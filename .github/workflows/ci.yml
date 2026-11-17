@@ -32,6 +32,83 @@ jobs:
         run: yarn typecheck
 
 
+  # The C++ engine, built and tested with no phone and no React Native.
+  test-core:
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: C++17
+            flags: -DLCE_CXX_STANDARD=17
+          - name: C++20
+            flags: -DLCE_CXX_STANDARD=20
+          - name: C++17 with sanitizers
+            flags: -DLCE_CXX_STANDARD=17 -DLCE_SANITIZE=ON
+
+    name: test-core (${{ matrix.name }})
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Build and run the engine tests
+        run: |
+          cmake -S cpp -B build/cpp -DLCE_BUILD_TESTS=ON -DLCE_WERROR=ON ${{ matrix.flags }}
+          cmake --build build/cpp --parallel
+          ./build/cpp/lce_tests
+
+  # Validation, mapper and AbortSignal, in plain Node.
+  test-js:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup
+        uses: ./.github/actions/setup
+
+      - name: Run the TypeScript tests
+        run: yarn test
+
+  # The Kotlin layer on the JVM, with the engine built for the runner.
+  test-android:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup
+        uses: ./.github/actions/setup
+
+      - name: Install JDK
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Finalize Android SDK
+        run: |
+          /bin/bash -c "yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null"
+
+      - name: Run the Kotlin unit tests
+        working-directory: example/android
+        run: ./gradlew :react-native-location-confidence:testDebugUnitTest --console=plain
+
+  # The Swift layer on the Mac, with the engine built for the runner.
+  test-ios:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Run the Swift unit tests
+        run: swift test
+
   build-library:
     runs-on: ubuntu-latest
 
