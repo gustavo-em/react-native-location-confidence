@@ -116,7 +116,7 @@ struct LocationReading {
   MockSignal mockSignal = MockSignal::Unknown;
 
   // A counter given by the history when the reading is stored: 1, 2, 3...
-  // It says "this one arrived before that one". An evaluation request uses it
+  // It says "this one arrived before that one". A request uses it
   // to tell the readings it obtained itself from the ones that were already
   // in the history: it remembers which number was next when it started.
   std::uint64_t arrivalNumber = 0;

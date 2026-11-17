@@ -99,7 +99,7 @@
 // WHAT THE ANSWER IS USED FOR
 // =============================================================================
 //
-// buildAssessment() in Assessment.cpp takes the chosen reading and writes the
+// buildReport() in Report.cpp takes the chosen reading and writes the
 // final report: is the phone inside the delivery radius, what is the quality
 // score, and why.
 //

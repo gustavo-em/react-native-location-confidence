@@ -2,12 +2,12 @@
 // THE ORDER OF THE CALLS IN THIS FILE
 // =============================================================================
 //
-//   startEvaluation(sessionId, settings, nowMs)            <- the app asked
+//   startRequest(sessionId, settings, nowMs)               <- the app asked
 //     |-- the address or the radius makes no sense?  ->  InvalidRequest
-//     |-- no such session / too many evaluations?    ->  a report that says so
-//     |      `-- putReportWithNoEvaluationInTheWaitingList()
-//     |-- request.start()                                  (EvaluationRequest.cpp)
-//     `-- collectFinishedEvaluations()
+//     |-- no such session / too many requests?       ->  a report that says so
+//     |      `-- putReportWithNoRequestInTheWaitingList()
+//     |-- request.start()                                  (ProximityRequest.cpp)
+//     `-- collectFinishedRequests()
 //
 //   whenReadingsArrive(readings, howMany, nowMs)           <- the GPS delivered readings
 //     |-- for each reading
@@ -15,21 +15,21 @@
 //     |      `-- storeOneReading()    into every history that wants readings
 //     |             |-- chooseBestReading()   which reading must keep its place
 //     |             `-- history.store()                    (LocationHistory.cpp)
-//     |-- for each running evaluation: request.whenReadingsArrive()
-//     `-- collectFinishedEvaluations()
+//     |-- for each running request: request.whenReadingsArrive()
+//     `-- collectFinishedRequests()
 //
 //   whenTimePasses(nowMs)                                  <- the timer of the platform fired
-//     |-- for each running evaluation: request.whenTimePasses()
+//     |-- for each running request: request.whenTimePasses()
 //     |-- sessions whose collecting time is over stop collecting
-//     `-- collectFinishedEvaluations()
+//     `-- collectFinishedRequests()
 //
-//   cancelEvaluation(), closeSession(), whenAppGoesToBackground(),
+//   cancelRequest(), closeSession(), whenAppGoesToBackground(),
 //   whenLocationPermissionIsLost(), whenLocationProviderFails()
-//     |-- request.stop(why)      for the evaluations it concerns
-//     `-- collectFinishedEvaluations()
+//     |-- request.stop(why)      for the requests it concerns
+//     `-- collectFinishedRequests()
 //
-//   collectFinishedEvaluations()
-//     `-- for each evaluation that finished
+//   collectFinishedRequests()
+//     `-- for each request that finished
 //            |-- putReportInTheWaitingList()
 //            `-- its slot is wiped and becomes free
 //
@@ -38,10 +38,10 @@
 //     whatThePlatformMustDoNow()    GPS on or off, activity updates, next wake up
 //
 // =============================================================================
-// EXAMPLE, STEP BY STEP - one evaluation with no session
+// EXAMPLE, STEP BY STEP - one request with no session
 // =============================================================================
 //
-//   second 0.0   startEvaluation(0, settings, 0)
+//   second 0.0   startRequest(0, settings, 0)
 //                  request.start()                 the first attempt begins
 //                whatThePlatformMustDoNow()
 //                  -> GPS wanted, every 1000 ms; wake up at 4500
@@ -50,9 +50,9 @@
 //   second 1.2   the GPS delivers one reading
 //                whenReadingsArrive(reading, 1, 1200)
 //                  checkReading()                  -> accepted
-//                  storeOneReading()               into the evaluation's own history
+//                  storeOneReading()               into the request's own history
 //                  request.whenReadingsArrive()    -> the answer is good: finished
-//                  collectFinishedEvaluations()    the report goes to the waiting list
+//                  collectFinishedRequests()       the report goes to the waiting list
 //                takeFinishedReport()              -> the report (Available, Fresh)
 //                takeFinishedReport()              -> false, nothing else
 //                whatThePlatformMustDoNow()
@@ -60,14 +60,14 @@
 //                the platform turns the GPS off and cancels the timer
 //
 // =============================================================================
-// EXAMPLE - two evaluations share the GPS
+// EXAMPLE - two requests share the GPS
 // =============================================================================
 //
-//   second 0   startEvaluation(session 1, address A)    GPS wanted
-//   second 1   startEvaluation(session 1, address B)    GPS still wanted (already on)
-//   second 2   cancelEvaluation(the first one)
+//   second 0   startRequest(session 1, address A)       GPS wanted
+//   second 1   startRequest(session 1, address B)       GPS still wanted (already on)
+//   second 2   cancelRequest(the first one)
 //                whatThePlatformMustDoNow()  -> GPS STILL wanted: the second
-//                                               evaluation is running
+//                                               request is running
 //   second 3   a good reading arrives        -> the second one finishes
 //                whatThePlatformMustDoNow()  -> GPS not wanted
 //
@@ -81,7 +81,7 @@
 //   second 0    openSession(keepCollectingReadings, one reading every 5 s)
 //                 whatThePlatformMustDoNow()  -> GPS wanted, every 5000 ms
 //   second 0-60 readings arrive; one is kept every 5 seconds
-//   second 60   startEvaluation(that session)
+//   second 60   startRequest(that session)
 //                 the history already has readings: if the GPS gives nothing
 //                 new, the answer can come from them ("cached")
 //                 whatThePlatformMustDoNow()  -> GPS wanted, every 1000 ms
@@ -192,52 +192,52 @@ void Engine::closeSession(std::uint32_t sessionId, std::int64_t nowMs) noexcept 
     return;  // closing twice does nothing
   }
 
-  // Stop the evaluations that belong to this session.
+  // Stop the requests that belong to this session.
   const PhoneActivityHistory activityHistory = phoneActivityUntil(nowMs);
-  for (RunningEvaluation& evaluation : evaluations_) {
+  for (RequestSlot& slot : requestSlots_) {
     const bool belongsToThisSession =
-        evaluation.isRunning && evaluation.hasSession && evaluation.sessionPosition == position;
+        slot.isInUse && slot.hasSession && slot.sessionPosition == position;
     if (belongsToThisSession) {
-      evaluation.request.stop(WhyTheEvaluationStopped::SessionWasClosed, historyOf(evaluation),
+      slot.request.stop(WhyTheRequestStopped::SessionWasClosed, historyOf(slot),
                               activityHistory, nowMs);
     }
   }
-  collectFinishedEvaluations();
+  collectFinishedRequests();
 
   // Forget its readings and free the slot. `clear()` wipes the coordinates.
   sessions_[position].history.clear();
   sessions_[position] = Session{};
 }
 
-// --- Evaluations -------------------------------------------------------------
+// --- Requests -------------------------------------------------------------
 
-EvaluationStarted Engine::startEvaluation(std::uint32_t sessionId,
-                                          const EvaluationSettings& settings,
+RequestStarted Engine::startRequest(std::uint32_t sessionId,
+                                          const RequestSettings& settings,
                                           std::int64_t nowMs) noexcept {
-  EvaluationStarted started;
+  RequestStarted started;
 
   // The JavaScript side already checks the address and the radius. This is a
   // second check, so that a broken value can never reach the calculations.
   const bool requestMakesSense = isValidCoordinates(settings.asked.destination) &&
                                  isValidRadiusMeters(settings.asked.radiusMeters);
   if (!requestMakesSense) {
-    started.result = EvaluationStarted::Result::InvalidRequest;
+    started.result = RequestStarted::Result::InvalidRequest;
     return started;
   }
 
-  // Every evaluation produces exactly one report, sooner or later. A new one
+  // Every request produces exactly one report, sooner or later. A new one
   // is only accepted when there is room for its report AND for the reports
-  // of all the evaluations that are still running. Normally the list is
+  // of all the requests that are still running. Normally the list is
   // empty, because the platform takes the reports after every call.
   const std::size_t reportsThatWillNeedRoom =
-      howManyReportsWaiting_ + howManyEvaluationsAreRunning() + 1;
+      howManyReportsWaiting_ + howManyRequestsAreRunning() + 1;
   const bool thereWouldBeNoRoom = (reportsThatWillNeedRoom > MAX_REPORTS_WAITING);
   if (thereWouldBeNoRoom) {
-    started.result = EvaluationStarted::Result::TooManyReportsWaiting;
+    started.result = RequestStarted::Result::TooManyReportsWaiting;
     return started;
   }
 
-  started.result = EvaluationStarted::Result::Accepted;
+  started.result = RequestStarted::Result::Accepted;
   started.requestId = nextRequestId_;
   nextRequestId_ += 1;
 
@@ -251,49 +251,49 @@ EvaluationStarted Engine::startEvaluation(std::uint32_t sessionId,
   if (wantsASession && !sessionExists) {
     // The app may have closed the session a moment ago. That is not a
     // programming mistake: answer with a report that says so.
-    putReportWithNoEvaluationInTheWaitingList(started.requestId, sessionId, settings,
+    putReportWithNoRequestInTheWaitingList(started.requestId, sessionId, settings,
                                               ReasonCode::UnknownSession);
     return started;
   }
 
-  const std::size_t slot = findFreeEvaluationSlot();
-  const bool thereIsNoFreeSlot = (slot == MAX_RUNNING_EVALUATIONS);
+  const std::size_t slotNumber = findFreeRequestSlot();
+  const bool thereIsNoFreeSlot = (slotNumber == MAX_RUNNING_REQUESTS);
   const bool sessionHasTooMany =
       wantsASession &&
-      countEvaluationsOfSession(sessionPosition) >= MAX_RUNNING_EVALUATIONS_PER_SESSION;
+      countRequestsOfSession(sessionPosition) >= MAX_RUNNING_REQUESTS_PER_SESSION;
 
   if (thereIsNoFreeSlot || sessionHasTooMany) {
-    putReportWithNoEvaluationInTheWaitingList(started.requestId, sessionId, settings,
+    putReportWithNoRequestInTheWaitingList(started.requestId, sessionId, settings,
                                               ReasonCode::Busy);
     return started;
   }
 
-  RunningEvaluation& evaluation = evaluations_[slot];
-  evaluation = RunningEvaluation{};
-  evaluation.isRunning = true;
-  evaluation.hasSession = wantsASession;
-  evaluation.sessionPosition = wantsASession ? sessionPosition : 0;
+  RequestSlot& slot = requestSlots_[slotNumber];
+  slot = RequestSlot{};
+  slot.isInUse = true;
+  slot.hasSession = wantsASession;
+  slot.sessionPosition = wantsASession ? sessionPosition : 0;
 
-  evaluation.request.start(started.requestId, sessionId, settings, historyOf(evaluation),
+  slot.request.start(started.requestId, sessionId, settings, historyOf(slot),
                            phoneActivityUntil(nowMs), nowMs);
 
   // It may have finished already (no permission, location turned off...).
-  collectFinishedEvaluations();
+  collectFinishedRequests();
   return started;
 }
 
-void Engine::cancelEvaluation(std::uint32_t requestId, std::int64_t nowMs) noexcept {
+void Engine::cancelRequest(std::uint32_t requestId, std::int64_t nowMs) noexcept {
   const PhoneActivityHistory activityHistory = phoneActivityUntil(nowMs);
 
-  for (RunningEvaluation& evaluation : evaluations_) {
-    const bool isTheOne = evaluation.isRunning && evaluation.request.requestId() == requestId;
+  for (RequestSlot& slot : requestSlots_) {
+    const bool isTheOne = slot.isInUse && slot.request.requestId() == requestId;
     if (isTheOne) {
-      evaluation.request.stop(WhyTheEvaluationStopped::CancelledByTheApp, historyOf(evaluation),
+      slot.request.stop(WhyTheRequestStopped::CancelledByTheApp, historyOf(slot),
                               activityHistory, nowMs);
     }
   }
 
-  collectFinishedEvaluations();
+  collectFinishedRequests();
 }
 
 // --- Things that happen ------------------------------------------------------
@@ -306,7 +306,7 @@ void Engine::whenReadingsArrive(const UncheckedReading* readings,
   const PhoneActivityHistory activityHistory = phoneActivityUntil(nowMs);
 
   // Which sessions take readings right now?
-  //   - a session with an evaluation running takes every reading;
+  //   - a session with a request running takes every reading;
   //   - a session that is only collecting takes one batch every
   //     `timeBetweenReadingsMs`, so that 10 slots cover more than 10 seconds.
   std::array<bool, MAX_OPEN_SESSIONS> sessionTakesReadings{};
@@ -316,19 +316,19 @@ void Engine::whenReadingsArrive(const UncheckedReading* readings,
       continue;
     }
 
-    const bool hasAnEvaluationRunning = (countEvaluationsOfSession(position) > 0);
+    const bool hasARequestRunning = (countRequestsOfSession(position) > 0);
     const bool isCollecting = (session.collecting == CollectingState::Active);
     const bool enoughTimeSinceTheLastOne =
         !session.hasKeptAReading ||
         (nowMs - session.lastReadingKeptAtMs >= session.timeBetweenReadingsMs);
 
     sessionTakesReadings[position] =
-        hasAnEvaluationRunning || (isCollecting && enoughTimeSinceTheLastOne);
+        hasARequestRunning || (isCollecting && enoughTimeSinceTheLastOne);
   }
 
   // Each place that stores readings keeps its own notes about this batch.
   std::array<NotesAboutNewReadings, MAX_OPEN_SESSIONS> notesOfEachSession{};
-  std::array<NotesAboutNewReadings, MAX_RUNNING_EVALUATIONS> notesOfEachLoneEvaluation{};
+  std::array<NotesAboutNewReadings, MAX_RUNNING_REQUESTS> notesOfEachLoneRequest{};
 
   for (std::size_t index = 0; index < howMany; ++index) {
     // Every reading passes the entrance check once.
@@ -341,12 +341,12 @@ void Engine::whenReadingsArrive(const UncheckedReading* readings,
       }
     }
 
-    for (std::size_t slot = 0; slot < MAX_RUNNING_EVALUATIONS; ++slot) {
-      RunningEvaluation& evaluation = evaluations_[slot];
-      const bool worksAlone = evaluation.isRunning && !evaluation.hasSession;
+    for (std::size_t slotNumber = 0; slotNumber < MAX_RUNNING_REQUESTS; ++slotNumber) {
+      RequestSlot& slot = requestSlots_[slotNumber];
+      const bool worksAlone = slot.isInUse && !slot.hasSession;
       if (worksAlone) {
-        storeOneReading(evaluation.ownHistory, check, activityHistory, nowMs,
-                        notesOfEachLoneEvaluation[slot]);
+        storeOneReading(slot.ownHistory, check, activityHistory, nowMs,
+                        notesOfEachLoneRequest[slotNumber]);
       }
     }
   }
@@ -359,21 +359,21 @@ void Engine::whenReadingsArrive(const UncheckedReading* readings,
     }
   }
 
-  // Tell every running evaluation, with the notes of the place it reads from.
-  for (std::size_t slot = 0; slot < MAX_RUNNING_EVALUATIONS; ++slot) {
-    RunningEvaluation& evaluation = evaluations_[slot];
-    if (!evaluation.isRunning) {
+  // Tell every running request, with the notes of the place it reads from.
+  for (std::size_t slotNumber = 0; slotNumber < MAX_RUNNING_REQUESTS; ++slotNumber) {
+    RequestSlot& slot = requestSlots_[slotNumber];
+    if (!slot.isInUse) {
       continue;
     }
 
-    const NotesAboutNewReadings& notes = evaluation.hasSession
-                                             ? notesOfEachSession[evaluation.sessionPosition]
-                                             : notesOfEachLoneEvaluation[slot];
+    const NotesAboutNewReadings& notes = slot.hasSession
+                                             ? notesOfEachSession[slot.sessionPosition]
+                                             : notesOfEachLoneRequest[slotNumber];
 
-    evaluation.request.whenReadingsArrive(historyOf(evaluation), activityHistory, nowMs, notes);
+    slot.request.whenReadingsArrive(historyOf(slot), activityHistory, nowMs, notes);
   }
 
-  collectFinishedEvaluations();
+  collectFinishedRequests();
 }
 
 void Engine::whenPhoneActivityChanges(PhoneActivity activity,
@@ -404,9 +404,9 @@ void Engine::whenTimePasses(std::int64_t nowMs) noexcept {
 
   const PhoneActivityHistory activityHistory = phoneActivityUntil(nowMs);
 
-  for (RunningEvaluation& evaluation : evaluations_) {
-    if (evaluation.isRunning) {
-      evaluation.request.whenTimePasses(historyOf(evaluation), activityHistory, nowMs);
+  for (RequestSlot& slot : requestSlots_) {
+    if (slot.isInUse) {
+      slot.request.whenTimePasses(historyOf(slot), activityHistory, nowMs);
     }
   }
 
@@ -421,13 +421,13 @@ void Engine::whenTimePasses(std::int64_t nowMs) noexcept {
     }
   }
 
-  collectFinishedEvaluations();
+  collectFinishedRequests();
 }
 
 void Engine::whenAppGoesToBackground(std::int64_t nowMs) noexcept {
   // Nothing keeps running while the app is not visible, and nothing starts
   // again by itself when the app comes back.
-  stopEveryEvaluation(WhyTheEvaluationStopped::AppWentToBackground, nowMs);
+  stopEveryRequest(WhyTheRequestStopped::AppWentToBackground, nowMs);
   stopCollectingInEverySession();
 
   // The phone activity is no longer watched: what happens from now on is
@@ -436,7 +436,7 @@ void Engine::whenAppGoesToBackground(std::int64_t nowMs) noexcept {
 }
 
 void Engine::whenLocationPermissionIsLost(std::int64_t nowMs) noexcept {
-  stopEveryEvaluation(WhyTheEvaluationStopped::LocationPermissionWasLost, nowMs);
+  stopEveryRequest(WhyTheRequestStopped::LocationPermissionWasLost, nowMs);
   stopCollectingInEverySession();
 
   // The user took the permission away: forget every location we have.
@@ -449,7 +449,7 @@ void Engine::whenLocationPermissionIsLost(std::int64_t nowMs) noexcept {
 }
 
 void Engine::whenLocationProviderFails(std::int64_t nowMs) noexcept {
-  stopEveryEvaluation(WhyTheEvaluationStopped::LocationProviderFailed, nowMs);
+  stopEveryRequest(WhyTheRequestStopped::LocationProviderFailed, nowMs);
   stopCollectingInEverySession();
 }
 
@@ -458,24 +458,24 @@ void Engine::whenLocationProviderFails(std::int64_t nowMs) noexcept {
 PlatformWork Engine::whatThePlatformMustDoNow() const noexcept {
   PlatformWork work;
 
-  bool someEvaluationWantsTheGps = false;
+  bool someRequestWantsTheGps = false;
   bool someSessionIsCollecting = false;
   std::int64_t shortestTimeBetweenReadingsMs = 0;
 
-  // Evaluations: do they want the GPS, the phone activity, a wake up?
-  for (const RunningEvaluation& evaluation : evaluations_) {
-    if (!evaluation.isRunning) {
+  // Requests: do they want the GPS, the phone activity, a wake up?
+  for (const RequestSlot& slot : requestSlots_) {
+    if (!slot.isInUse) {
       continue;
     }
 
-    if (evaluation.request.wantsLocationUpdates()) {
-      someEvaluationWantsTheGps = true;
+    if (slot.request.wantsLocationUpdates()) {
+      someRequestWantsTheGps = true;
     }
-    if (evaluation.request.wantsPhoneActivityUpdates()) {
+    if (slot.request.wantsPhoneActivityUpdates()) {
       work.phoneActivityUpdatesAreWanted = true;
     }
 
-    const std::int64_t wakeUpAtMs = evaluation.request.nextWakeUpAtMs();
+    const std::int64_t wakeUpAtMs = slot.request.nextWakeUpAtMs();
     if (!work.wakeUpIsWanted || wakeUpAtMs < work.wakeUpAtMs) {
       work.wakeUpIsWanted = true;
       work.wakeUpAtMs = wakeUpAtMs;
@@ -502,11 +502,11 @@ PlatformWork Engine::whatThePlatformMustDoNow() const noexcept {
     }
   }
 
-  work.locationUpdatesAreWanted = someEvaluationWantsTheGps || someSessionIsCollecting;
+  work.locationUpdatesAreWanted = someRequestWantsTheGps || someSessionIsCollecting;
 
-  if (someEvaluationWantsTheGps) {
-    // An evaluation is waiting for an answer: ask for readings quickly.
-    work.timeBetweenLocationUpdatesMs = TIME_BETWEEN_READINGS_DURING_EVALUATION_MS;
+  if (someRequestWantsTheGps) {
+    // A request is waiting for an answer: ask for readings quickly.
+    work.timeBetweenLocationUpdatesMs = TIME_BETWEEN_READINGS_DURING_REQUEST_MS;
   } else if (someSessionIsCollecting) {
     work.timeBetweenLocationUpdatesMs = shortestTimeBetweenReadingsMs;
   }
@@ -514,7 +514,7 @@ PlatformWork Engine::whatThePlatformMustDoNow() const noexcept {
   return work;
 }
 
-bool Engine::takeFinishedReport(Assessment& report) noexcept {
+bool Engine::takeFinishedReport(Report& report) noexcept {
   const bool nothingIsWaiting = (howManyReportsWaiting_ == 0);
   if (nothingIsWaiting) {
     return false;
@@ -528,7 +528,7 @@ bool Engine::takeFinishedReport(Assessment& report) noexcept {
   howManyReportsWaiting_ -= 1;
 
   // Wipe the place that is no longer used: a report holds a position.
-  reportsWaiting_[howManyReportsWaiting_] = Assessment{};
+  reportsWaiting_[howManyReportsWaiting_] = Report{};
   return true;
 }
 
@@ -544,10 +544,10 @@ std::size_t Engine::howManySessionsAreOpen() const noexcept {
   return howMany;
 }
 
-std::size_t Engine::howManyEvaluationsAreRunning() const noexcept {
+std::size_t Engine::howManyRequestsAreRunning() const noexcept {
   std::size_t howMany = 0;
-  for (const RunningEvaluation& evaluation : evaluations_) {
-    if (evaluation.isRunning) {
+  for (const RequestSlot& slot : requestSlots_) {
+    if (slot.isInUse) {
       howMany += 1;
     }
   }
@@ -595,33 +595,33 @@ std::size_t Engine::findFreeSessionSlot() const noexcept {
   return found;
 }
 
-std::size_t Engine::findFreeEvaluationSlot() const noexcept {
-  std::size_t found = MAX_RUNNING_EVALUATIONS;  // this value means "not found"
+std::size_t Engine::findFreeRequestSlot() const noexcept {
+  std::size_t found = MAX_RUNNING_REQUESTS;     // this value means "not found"
 
-  for (std::size_t slot = 0; slot < MAX_RUNNING_EVALUATIONS; ++slot) {
-    const bool isFree = !evaluations_[slot].isRunning;
-    const bool nothingFoundYet = (found == MAX_RUNNING_EVALUATIONS);
+  for (std::size_t slotNumber = 0; slotNumber < MAX_RUNNING_REQUESTS; ++slotNumber) {
+    const bool isFree = !requestSlots_[slotNumber].isInUse;
+    const bool nothingFoundYet = (found == MAX_RUNNING_REQUESTS);
     if (isFree && nothingFoundYet) {
-      found = slot;
+      found = slotNumber;
     }
   }
   return found;
 }
 
-std::size_t Engine::countEvaluationsOfSession(std::size_t sessionPosition) const noexcept {
+std::size_t Engine::countRequestsOfSession(std::size_t sessionPosition) const noexcept {
   std::size_t howMany = 0;
-  for (const RunningEvaluation& evaluation : evaluations_) {
-    if (evaluation.isRunning && evaluation.hasSession &&
-        evaluation.sessionPosition == sessionPosition) {
+  for (const RequestSlot& slot : requestSlots_) {
+    if (slot.isInUse && slot.hasSession &&
+        slot.sessionPosition == sessionPosition) {
       howMany += 1;
     }
   }
   return howMany;
 }
 
-const LocationHistory& Engine::historyOf(const RunningEvaluation& evaluation) const noexcept {
-  return evaluation.hasSession ? sessions_[evaluation.sessionPosition].history
-                               : evaluation.ownHistory;
+const LocationHistory& Engine::historyOf(const RequestSlot& slot) const noexcept {
+  return slot.hasSession ? sessions_[slot.sessionPosition].history
+                               : slot.ownHistory;
 }
 
 PhoneActivityHistory Engine::phoneActivityUntil(std::int64_t nowMs) const noexcept {
@@ -660,9 +660,9 @@ void Engine::forgetOldThings(std::int64_t nowMs) noexcept {
       session.history.forgetOldReadings(nowMs);
     }
   }
-  for (RunningEvaluation& evaluation : evaluations_) {
-    if (evaluation.isRunning && !evaluation.hasSession) {
-      evaluation.ownHistory.forgetOldReadings(nowMs);
+  for (RequestSlot& slot : requestSlots_) {
+    if (slot.isInUse && !slot.hasSession) {
+      slot.ownHistory.forgetOldReadings(nowMs);
     }
   }
 
@@ -716,16 +716,16 @@ void Engine::storeOneReading(LocationHistory& history,
   }
 }
 
-void Engine::stopEveryEvaluation(WhyTheEvaluationStopped why, std::int64_t nowMs) noexcept {
+void Engine::stopEveryRequest(WhyTheRequestStopped why, std::int64_t nowMs) noexcept {
   const PhoneActivityHistory activityHistory = phoneActivityUntil(nowMs);
 
-  for (RunningEvaluation& evaluation : evaluations_) {
-    if (evaluation.isRunning) {
-      evaluation.request.stop(why, historyOf(evaluation), activityHistory, nowMs);
+  for (RequestSlot& slot : requestSlots_) {
+    if (slot.isInUse) {
+      slot.request.stop(why, historyOf(slot), activityHistory, nowMs);
     }
   }
 
-  collectFinishedEvaluations();
+  collectFinishedRequests();
 }
 
 void Engine::stopCollectingInEverySession() noexcept {
@@ -737,9 +737,9 @@ void Engine::stopCollectingInEverySession() noexcept {
   }
 }
 
-void Engine::putReportInTheWaitingList(const Assessment& report) noexcept {
-  // startEvaluation() only accepts an evaluation when there is room for its
-  // report, and each evaluation produces exactly one. So there is always
+void Engine::putReportInTheWaitingList(const Report& report) noexcept {
+  // startRequest() only accepts a request when there is room for its
+  // report, and each request produces exactly one. So there is always
   // room here; the check only protects the memory if that ever breaks.
   const bool thereIsRoom = (howManyReportsWaiting_ < MAX_REPORTS_WAITING);
   if (thereIsRoom) {
@@ -751,12 +751,12 @@ void Engine::putReportInTheWaitingList(const Assessment& report) noexcept {
   }
 }
 
-void Engine::putReportWithNoEvaluationInTheWaitingList(std::uint32_t requestId,
+void Engine::putReportWithNoRequestInTheWaitingList(std::uint32_t requestId,
                                                        std::uint32_t sessionId,
-                                                       const EvaluationSettings& settings,
+                                                       const RequestSettings& settings,
                                                        ReasonCode why) noexcept {
   // Unavailable, no position, score 0, and the reason why nothing started.
-  Assessment report;
+  Report report;
   report.requestId = requestId;
   report.sessionId = sessionId;
   report.radiusMeters = settings.asked.radiusMeters;
@@ -764,26 +764,26 @@ void Engine::putReportWithNoEvaluationInTheWaitingList(std::uint32_t requestId,
   report.score = calculateQualityScore(ScoreInput{});
   report.reasons.add(why);
 
-  report.steps[0] = EvaluationStep::Started;
-  report.steps[1] = EvaluationStep::Finished;
+  report.steps[0] = RequestStep::Started;
+  report.steps[1] = RequestStep::Finished;
   report.howManySteps = 2;
 
   putReportInTheWaitingList(report);
 }
 
-void Engine::collectFinishedEvaluations() noexcept {
-  for (RunningEvaluation& evaluation : evaluations_) {
-    const bool justFinished = evaluation.isRunning && evaluation.request.isFinished();
+void Engine::collectFinishedRequests() noexcept {
+  for (RequestSlot& slot : requestSlots_) {
+    const bool justFinished = slot.isInUse && slot.request.isFinished();
     if (!justFinished) {
       continue;
     }
 
-    Assessment report = evaluation.request.report();
+    Report report = slot.request.report();
 
     // When the session stopped collecting because its time was over, the
     // reports of that session say so.
     const bool sessionCollectingTimeIsOver =
-        evaluation.hasSession && sessions_[evaluation.sessionPosition].collectingTimeIsOver;
+        slot.hasSession && sessions_[slot.sessionPosition].collectingTimeIsOver;
     if (sessionCollectingTimeIsOver) {
       report.reasons.add(ReasonCode::MonitoringDurationReached);
     }
@@ -791,8 +791,8 @@ void Engine::collectFinishedEvaluations() noexcept {
     putReportInTheWaitingList(report);
 
     // Free the slot. Assigning an empty value wipes the readings it held.
-    evaluation.ownHistory.clear();
-    evaluation = RunningEvaluation{};
+    slot.ownHistory.clear();
+    slot = RequestSlot{};
   }
 }
 

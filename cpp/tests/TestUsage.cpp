@@ -8,7 +8,7 @@
 //     `-- history.store()                           LocationHistory.cpp
 //
 //   the app asks "is the courier at the address?" askTheEngine()
-//     `-- buildAssessment()                         Assessment.cpp
+//     `-- buildReport()                             Report.cpp
 //           |-- chooseBestReading()                 ReadingSelection.cpp
 //           |     |-- checkAllReadingsForGpsJumps()            JumpDetector.cpp
 //           |     |-- calculateTimeInEachPhoneActivity()       PhoneActivityTimeline.cpp
@@ -18,12 +18,12 @@
 //
 // In every scenario the delivery address is the starting point, the delivery
 // radius is 100 meters and the GPS error of each reading is 5 meters. The
-// evaluation request obtained every reading itself.
+// request obtained every reading itself.
 #include "third_party/doctest.h"
 
 #include <cstdint>
 
-#include "Assessment.hpp"
+#include "Report.hpp"
 #include "JumpDetector.hpp"
 #include "LocationHistory.hpp"
 #include "PhoneActivityTimeline.hpp"
@@ -62,7 +62,7 @@ void receiveReading(LocationHistory& history, double seconds, double metersFromA
 }
 
 // The app asks: is the courier at the address?
-Assessment askTheEngine(const LocationHistory& history,
+Report askTheEngine(const LocationHistory& history,
                         double secondsNow,
                         const PhoneActivityHistory& phoneActivity) {
   WhatTheAppAskedFor asked;
@@ -71,7 +71,7 @@ Assessment askTheEngine(const LocationHistory& history,
 
   const WhatTheRequestKnows request;  // it obtained every reading; permission granted
 
-  return buildAssessment(history, phoneActivity, secondsToMs(secondsNow), asked, request);
+  return buildReport(history, phoneActivity, secondsToMs(secondsNow), asked, request);
 }
 
 // Three readings 20 meters from the address, one per second.
@@ -89,10 +89,10 @@ TEST_CASE("USE-1 courier at the door, and the phone says it is standing still") 
   const LocationHistory history = courierAtTheDoor();
 
   // The newest reading is 1 second old.
-  const Assessment answer =
+  const Report answer =
       askTheEngine(history, 3, phoneReported(PhoneActivity::StandingStill, 0, 3));
 
-  CHECK(answer.status == AssessmentStatus::Available);
+  CHECK(answer.status == ReportStatus::Available);
   CHECK(answer.source == FixSource::Fresh);
   CHECK(answer.readingAgeMs == 1000);
   CHECK(answer.howFarPhoneCouldBeMeters == doctest::Approx(5.5));  // 5 + 0.5 x 1
@@ -110,24 +110,24 @@ TEST_CASE("USE-2 same place, but the phone reported nothing about its activity")
   const LocationHistory history = courierAtTheDoor();
 
   // 1 second after the newest reading: 45 x 1 = 45 meters.
-  const Assessment afterOneSecond = askTheEngine(history, 3, phoneReportedNothing());
+  const Report afterOneSecond = askTheEngine(history, 3, phoneReportedNothing());
   CHECK(afterOneSecond.howFarPhoneCouldBeMeters == doctest::Approx(50.0));
   CHECK(afterOneSecond.relation == EvidenceRelation::SupportsInside);  // 20 + 50 = 70
   CHECK(afterOneSecond.score.qualityScore == 89);
 
   // 3 seconds after it: 45 x 3 = 135 meters. The same reading no longer
   // supports "inside", and the score falls to the limit for a wide doubt.
-  const Assessment afterThreeSeconds = askTheEngine(history, 5, phoneReportedNothing());
+  const Report afterThreeSeconds = askTheEngine(history, 5, phoneReportedNothing());
   CHECK(afterThreeSeconds.howFarPhoneCouldBeMeters == doctest::Approx(140.0));
   CHECK(afterThreeSeconds.relation == EvidenceRelation::Inconclusive);  // 20 + 140 = 160
   CHECK(afterThreeSeconds.score.rawScore == 77);
   CHECK(afterThreeSeconds.score.qualityScore == 35);
   CHECK(afterThreeSeconds.score.wasLimitedBy(ScoreLimit::UncertaintyAtLeast100));
   // The reading is the same and it was obtained now: the status does not change.
-  CHECK(afterThreeSeconds.status == AssessmentStatus::Available);
+  CHECK(afterThreeSeconds.status == ReportStatus::Available);
 
   // Knowing that the phone stood still keeps the answer after 3 seconds.
-  const Assessment standingStill =
+  const Report standingStill =
       askTheEngine(history, 5, phoneReported(PhoneActivity::StandingStill, 0, 5));
   CHECK(standingStill.howFarPhoneCouldBeMeters == doctest::Approx(6.5));  // 5 + 0.5 x 3
   CHECK(standingStill.relation == EvidenceRelation::SupportsInside);
@@ -144,7 +144,7 @@ TEST_CASE("USE-3 the GPS jumps away for one reading and comes back") {
   const JumpCheckOfAllReadings jumpCheck = checkAllReadingsForGpsJumps(history);
   CHECK(jumpCheck.ofEachReading[1].result == JumpCheckResult::ProbablyGpsJump);
 
-  const Assessment answer =
+  const Report answer =
       askTheEngine(history, 5, phoneReported(PhoneActivity::StandingStill, 0, 5));
 
   // The answer uses the newest good reading, not the one that jumped.
@@ -167,7 +167,7 @@ TEST_CASE("USE-4 courier walking, still far from the address") {
   receiveReading(history, 1, 177);
   receiveReading(history, 2, 174);
 
-  const Assessment answer = askTheEngine(history, 3, phoneReported(PhoneActivity::Walking, 0, 3));
+  const Report answer = askTheEngine(history, 3, phoneReported(PhoneActivity::Walking, 0, 3));
 
   CHECK(answer.howFarPhoneCouldBeMeters == doctest::Approx(8.0));  // 5 + 3 x 1
   CHECK(answer.distanceToDestinationMeters == doctest::Approx(174.0));
@@ -178,7 +178,7 @@ TEST_CASE("USE-4 courier walking, still far from the address") {
   // The score is high because the EVIDENCE is good. It says nothing about
   // the courier having arrived.
   CHECK(answer.score.qualityScore == 97);
-  CHECK(answer.status == AssessmentStatus::Available);
+  CHECK(answer.status == ReportStatus::Available);
 }
 
 TEST_CASE("USE-5 one reading that came with a speed from the GPS") {
@@ -193,7 +193,7 @@ TEST_CASE("USE-5 one reading that came with a speed from the GPS") {
 
   // 3 seconds later, nothing reported about the activity: the GPS speed is
   // what makes the distance small (option 2 of the movement model).
-  const Assessment answer = askTheEngine(history, 3, phoneReportedNothing());
+  const Report answer = askTheEngine(history, 3, phoneReportedNothing());
 
   CHECK(answer.howFarPhoneCouldBeMeters == doctest::Approx(20.15));  // 5 + 15.15
   CHECK(answer.relation == EvidenceRelation::SupportsInside);        // 20 + 20.15 = 40.15
@@ -209,14 +209,14 @@ TEST_CASE("USE-6 one old reading and nothing else known") {
   receiveReading(history, 0, 20);
 
   // 20 seconds later: 45 x 20 = 900 meters.
-  const Assessment answer = askTheEngine(history, 20, phoneReportedNothing());
+  const Report answer = askTheEngine(history, 20, phoneReportedNothing());
 
   CHECK(answer.howFarPhoneCouldBeMeters == doctest::Approx(905.0));
   CHECK(answer.relation == EvidenceRelation::Inconclusive);
 
   // A reading older than 10 seconds no longer counts as "obtained now".
   CHECK(answer.source == FixSource::Cached);
-  CHECK(answer.status == AssessmentStatus::Degraded);
+  CHECK(answer.status == ReportStatus::Degraded);
   CHECK(answer.reasons.contains(ReasonCode::LocationStale));
 
   CHECK(answer.score.rawScore == 64);
@@ -233,7 +233,7 @@ TEST_CASE("USE-7 the phone only started to report 2 seconds ago") {
 
   // "Standing still" from second 10 to second 12 covers only the last 2 of
   // those 10 seconds. The other 8 are unknown: 45 x 8 + 0.5 x 2 = 361 meters.
-  const Assessment coveredAtTheEnd =
+  const Report coveredAtTheEnd =
       askTheEngine(history, 12, phoneReported(PhoneActivity::StandingStill, 10, 12));
   CHECK(coveredAtTheEnd.howFarPhoneCouldBeMeters == doctest::Approx(366.0));
   CHECK(coveredAtTheEnd.relation == EvidenceRelation::Inconclusive);
@@ -244,7 +244,7 @@ TEST_CASE("USE-7 the phone only started to report 2 seconds ago") {
   CHECK_FALSE(coveredAtTheEnd.phoneActivity.standingStillSinceTheReading);
 
   // "Standing still" during the whole 10 seconds: 0.5 x 10 = 5 meters.
-  const Assessment coveredAllTheTime =
+  const Report coveredAllTheTime =
       askTheEngine(history, 12, phoneReported(PhoneActivity::StandingStill, 0, 12));
   CHECK(coveredAllTheTime.howFarPhoneCouldBeMeters == doctest::Approx(10.0));
   CHECK(coveredAllTheTime.relation == EvidenceRelation::SupportsInside);  // 20 + 10 = 30

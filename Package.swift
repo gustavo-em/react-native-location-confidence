@@ -21,8 +21,8 @@ import PackageDescription
 // exist on iOS and are built with the example app.
 
 let studyNotes = [
-  "src/Assessment.study.ts",
-  "src/EvaluationRequest.study.ts",
+  "src/Report.study.ts",
+  "src/ProximityRequest.study.ts",
   "src/JumpDetector.study.ts",
   "src/NodeRuntime.study.ts",
   "src/PhoneActivityTimeline.study.ts",

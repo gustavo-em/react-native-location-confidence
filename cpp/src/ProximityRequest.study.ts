@@ -1,7 +1,7 @@
-// Study file: TypeScript mirror of EvaluationRequest.hpp and EvaluationRequest.cpp.
+// Study file: TypeScript mirror of ProximityRequest.hpp and ProximityRequest.cpp.
 // Same names, same order. Not part of the library. If it ever disagrees with
 // the C++, the C++ is right.
-// Run: node --no-warnings --experimental-transform-types cpp/src/EvaluationRequest.study.ts
+// Run: node --no-warnings --experimental-transform-types cpp/src/ProximityRequest.study.ts
 // The examples at the end only run when this file is the one being run.
 
 /*
@@ -24,7 +24,7 @@ THE BUSINESS RULE
     At any moment   the total time is over (normally 12 s), the app cancels,
                     the app goes to the background...  -> finished
 
-  An evaluation ALWAYS finishes, and it finishes once. It never reads a clock
+  A request ALWAYS finishes, and it finishes once. It never reads a clock
   and never touches the GPS: it is told what happened and what time it is.
 
 THE ORDER OF THE CALLS
@@ -35,52 +35,52 @@ THE ORDER OF THE CALLS
 
   whenReadingsArrive()
   ├─ the total time is over?   ->  whenTimePasses()
-  ├─ buildAssessment()                                   (Assessment)
+  ├─ buildReport()                                       (Report)
   ├─ the answer is "available"?          ->  finishWith(that report)
   └─ weak, and still the first attempt?  ->  beginExtraTime()
 
   whenTimePasses()
   ├─ the total time is over?   ->  finishWithWhatWeRemember()
   ├─ the first attempt is over?
-  │    ├─ buildAssessment(): is a remembered reading good enough?
+  │    ├─ buildReport(): is a remembered reading good enough?
   │    ├─ yes, or there is no extra time  ->  finishWithWhatWeRemember()
   │    └─ no                              ->  beginExtraTime()
   └─ the extra time is over?   ->  finishWithWhatWeRemember()
 
   stop(why)  ->  finishWith(a report that says why)
 
-  finishWith(report)       the ONLY place where an evaluation ends
+  finishWith(report)       the ONLY place where a request ends
 
-ONE EVALUATION, STEP BY STEP
+ONE REQUEST, STEP BY STEP
 
   second 0.0   start()                  FIRST ATTEMPT, wake up at 4.5
   second 1.0   whenReadingsArrive()     GPS error 500
-                 buildAssessment()      -> Degraded (imprecise)
+                 buildReport()          -> Degraded (imprecise)
                  beginExtraTime()       EXTRA TIME, wake up at 8.0
   second 3.0   whenReadingsArrive()     GPS error 8
-                 buildAssessment()      -> Available, Recovered
+                 buildReport()          -> Available, Recovered
                  finishWith()
 
 WHAT THE REST OF THE ENGINE DOES WITH THIS
 
-  Engine.cpp keeps the evaluations that are running. Every time something
+  Engine.cpp keeps the requests that are running. Every time something
   happens it tells each of them, and then asks who is finished, whether the
   GPS is still wanted by someone, and when the next wake up must be.
 */
 
 import {
-  Assessment,
-  AssessmentStatus,
-  buildAssessment,
+  Report,
+  ReportStatus,
+  buildReport,
   calculateQualityScore,
   LocationPermission,
   PermissionPrecision,
-  ReasonCode as AssessmentReason,
+  ReasonCode as ReportReason,
   ScoreInput,
   ScoreLimit,
   WhatTheAppAskedFor,
   WhatTheRequestKnows,
-} from './Assessment.study.ts';
+} from './Report.study.ts';
 import {
   PhoneActivityConfidence,
   PhoneActivityHistory,
@@ -91,7 +91,7 @@ import {
 } from './ReadingSelection.study.ts';
 import { PhoneActivity } from './UncertaintyModel.study.ts';
 
-// EvaluationRequest.hpp
+// ProximityRequest.hpp
 
 export enum LocationProviderState {
   Available,
@@ -115,7 +115,7 @@ export class DeviceState {
   phoneActivity: PhoneActivitySupport = PhoneActivitySupport.NotSupported;
 }
 
-export class EvaluationSettings {
+export class RequestSettings {
   asked: WhatTheAppAskedFor = new WhatTheAppAskedFor();
   totalTimeAllowedMs: number = 12000;
   firstAttemptTimeMs: number = 4500;
@@ -129,7 +129,7 @@ export class NotesAboutNewReadings {
   reasons: Set<ReasonCode> = new Set();
 }
 
-export enum WhyTheEvaluationStopped {
+export enum WhyTheRequestStopped {
   CancelledByTheApp,
   AppWentToBackground,
   SessionWasClosed,
@@ -144,7 +144,7 @@ export type HistoryRightNow = Readonly<{
   arrivalNumberOfNextReading: number;
 }>;
 
-export enum EvaluationStep {
+export enum RequestStep {
   Started = 'started',
   FirstAttempt = 'first_attempt',
   ExtraTime = 'extra_time',
@@ -152,7 +152,7 @@ export enum EvaluationStep {
   Finished = 'finished',
 }
 
-// The reasons this file adds, on top of the ones Assessment.study.ts knows.
+// The reasons this file adds, on top of the ones Report.study.ts knows.
 // The values are the public texts.
 export enum RequestReason {
   LocationServicesDisabled = 'location_services_disabled',
@@ -171,16 +171,16 @@ export enum RequestReason {
   SessionStopped = 'session_stopped',
 }
 
-export type ReasonCode = AssessmentReason | RequestReason | string;
+export type ReasonCode = ReportReason | RequestReason | string;
 
-// The final report of an evaluation: the report of Assessment.study.ts plus
+// The final report of a request: the report of Report.study.ts plus
 // the notes of the request.
 export class FinishedReport {
-  assessment: Assessment = new Assessment();
+  built: Report = new Report();
   requestId: number = 0;
   sessionId: number = 0;
   reasons: Set<ReasonCode> = new Set();
-  steps: EvaluationStep[] = [];
+  steps: RequestStep[] = [];
   firstAttemptTimedOut: boolean = false;
   extraTimeWasUsed: boolean = false;
   fallbackCause: ReasonCode | undefined = undefined;
@@ -196,32 +196,32 @@ enum Phase {
   Finished,
 }
 
-// EvaluationRequest.cpp
+// ProximityRequest.cpp
 
 function notNegative(milliseconds: number): number {
   return milliseconds > 0 ? milliseconds : 0;
 }
 
-function findWhyTheAnswerIsNotGoodEnough(report: Assessment): ReasonCode {
-  let why: ReasonCode = AssessmentReason.NoUsableFix;
+function findWhyTheAnswerIsNotGoodEnough(report: Report): ReasonCode {
+  let why: ReasonCode = ReportReason.NoUsableFix;
 
-  if (report.reasons.has(AssessmentReason.LocationLowAccuracy)) {
-    why = AssessmentReason.LocationLowAccuracy;
-  } else if (report.reasons.has(AssessmentReason.PossibleMockLocation)) {
-    why = AssessmentReason.PossibleMockLocation;
-  } else if (report.reasons.has(AssessmentReason.PrecisionReduced)) {
-    why = AssessmentReason.PrecisionReduced;
-  } else if (report.reasons.has(AssessmentReason.SuspectedGpsJump)) {
-    why = AssessmentReason.SuspectedGpsJump;
-  } else if (report.reasons.has(AssessmentReason.LocationStale)) {
-    why = AssessmentReason.LocationStale;
+  if (report.reasons.has(ReportReason.LocationLowAccuracy)) {
+    why = ReportReason.LocationLowAccuracy;
+  } else if (report.reasons.has(ReportReason.PossibleMockLocation)) {
+    why = ReportReason.PossibleMockLocation;
+  } else if (report.reasons.has(ReportReason.PrecisionReduced)) {
+    why = ReportReason.PrecisionReduced;
+  } else if (report.reasons.has(ReportReason.SuspectedGpsJump)) {
+    why = ReportReason.SuspectedGpsJump;
+  } else if (report.reasons.has(ReportReason.LocationStale)) {
+    why = ReportReason.LocationStale;
   }
 
   return why;
 }
 
 function rememberedReadingIsGoodEnough(
-  remembered: Assessment,
+  remembered: Report,
   asked: WhatTheAppAskedFor
 ): boolean {
   const isPreciseEnough =
@@ -242,18 +242,18 @@ function rememberedReadingIsGoodEnough(
   );
 }
 
-function reportWithNothing(settings: EvaluationSettings): Assessment {
-  const report = new Assessment();
+function reportWithNothing(settings: RequestSettings): Report {
+  const report = new Report();
   report.radiusMeters = settings.asked.radiusMeters;
   report.permissionPrecision = settings.device.permissionPrecision;
   report.score = calculateQualityScore(new ScoreInput());
   return report;
 }
 
-export class EvaluationRequest {
+export class ProximityRequest {
   private requestId_: number = 0;
   private sessionId_: number = 0;
-  private settings_: EvaluationSettings = new EvaluationSettings();
+  private settings_: RequestSettings = new RequestSettings();
 
   private phase_: Phase = Phase.Finished;
 
@@ -264,7 +264,7 @@ export class EvaluationRequest {
   private whatThisRequestKnows_: WhatTheRequestKnows =
     new WhatTheRequestKnows();
 
-  private steps_: EvaluationStep[] = [];
+  private steps_: RequestStep[] = [];
   private firstAttemptTimedOut_: boolean = false;
   private extraTimeWasUsed_: boolean = false;
   private fallbackCause_: ReasonCode | undefined = undefined;
@@ -277,13 +277,13 @@ export class EvaluationRequest {
   start(
     requestId: number,
     sessionId: number,
-    settings: EvaluationSettings,
+    settings: RequestSettings,
     history: HistoryRightNow,
     activityHistory: PhoneActivityHistory,
     nowMs: number
   ): void {
-    // Forget everything from the evaluation that used this object before.
-    Object.assign(this, new EvaluationRequest());
+    // Forget everything from the request that used this object before.
+    Object.assign(this, new ProximityRequest());
 
     this.requestId_ = requestId;
     this.sessionId_ = sessionId;
@@ -306,7 +306,7 @@ export class EvaluationRequest {
     this.whatThisRequestKnows_.permissionPrecision =
       settings.device.permissionPrecision;
 
-    this.rememberStep(EvaluationStep.Started);
+    this.rememberStep(RequestStep.Started);
 
     if (settings.asked.usePhoneActivity) {
       const support = settings.device.phoneActivity;
@@ -348,7 +348,7 @@ export class EvaluationRequest {
 
     // The first attempt begins.
     this.phase_ = Phase.FirstAttempt;
-    this.rememberStep(EvaluationStep.FirstAttempt);
+    this.rememberStep(RequestStep.FirstAttempt);
     this.currentPhaseEndsAtMs_ = nowMs + this.settings_.firstAttemptTimeMs;
 
     this.whenTimePasses(history, activityHistory, nowMs);
@@ -375,7 +375,7 @@ export class EvaluationRequest {
       return;
     }
 
-    const reportRightNow = buildAssessment(
+    const reportRightNow = buildReport(
       history.readings,
       activityHistory,
       nowMs,
@@ -384,7 +384,7 @@ export class EvaluationRequest {
     );
 
     const answerIsGoodEnough =
-      reportRightNow.status === AssessmentStatus.Available;
+      reportRightNow.status === ReportStatus.Available;
     const stillInTheFirstAttempt = this.phase_ === Phase.FirstAttempt;
     const somethingArrived = notes.howManyArrived > 0;
     const thereIsExtraTime = this.settings_.extraTimeMs > 0;
@@ -428,7 +428,7 @@ export class EvaluationRequest {
       this.reasons_.add(RequestReason.InitialFixTimeout);
       this.fallbackCause_ = RequestReason.InitialFixTimeout;
 
-      const remembered = buildAssessment(
+      const remembered = buildReport(
         history.readings,
         activityHistory,
         nowMs,
@@ -453,7 +453,7 @@ export class EvaluationRequest {
   }
 
   stop(
-    why: WhyTheEvaluationStopped,
+    why: WhyTheRequestStopped,
     history: HistoryRightNow,
     activityHistory: PhoneActivityHistory,
     nowMs: number
@@ -462,7 +462,7 @@ export class EvaluationRequest {
       return;
     }
 
-    if (why === WhyTheEvaluationStopped.LocationProviderFailed) {
+    if (why === WhyTheRequestStopped.LocationProviderFailed) {
       this.reasons_.add(RequestReason.NativeProviderUnavailable);
       this.finishWithWhatWeRemember(history, activityHistory, nowMs);
       return;
@@ -470,18 +470,18 @@ export class EvaluationRequest {
 
     const report = reportWithNothing(this.settings_);
 
-    if (why === WhyTheEvaluationStopped.CancelledByTheApp) {
-      report.status = AssessmentStatus.Cancelled;
+    if (why === WhyTheRequestStopped.CancelledByTheApp) {
+      report.status = ReportStatus.Cancelled;
       this.reasons_.add(RequestReason.RequestCancelled);
-    } else if (why === WhyTheEvaluationStopped.AppWentToBackground) {
-      report.status = AssessmentStatus.Cancelled;
+    } else if (why === WhyTheRequestStopped.AppWentToBackground) {
+      report.status = ReportStatus.Cancelled;
       this.reasons_.add(RequestReason.AppBackgrounded);
-    } else if (why === WhyTheEvaluationStopped.SessionWasClosed) {
-      report.status = AssessmentStatus.Cancelled;
+    } else if (why === WhyTheRequestStopped.SessionWasClosed) {
+      report.status = ReportStatus.Cancelled;
       this.reasons_.add(RequestReason.SessionStopped);
     } else {
-      report.status = AssessmentStatus.Unavailable;
-      this.reasons_.add(AssessmentReason.PermissionDenied);
+      report.status = ReportStatus.Unavailable;
+      this.reasons_.add(ReportReason.PermissionDenied);
     }
 
     this.finishWith(report, nowMs);
@@ -522,14 +522,14 @@ export class EvaluationRequest {
     return nowMs >= this.mustFinishAtMs_;
   }
 
-  private rememberStep(step: EvaluationStep): void {
+  private rememberStep(step: RequestStep): void {
     this.steps_.push(step);
   }
 
   private beginExtraTime(history: HistoryRightNow, nowMs: number): void {
     this.phase_ = Phase.ExtraTime;
     this.extraTimeWasUsed_ = true;
-    this.rememberStep(EvaluationStep.ExtraTime);
+    this.rememberStep(RequestStep.ExtraTime);
 
     this.whatThisRequestKnows_.firstArrivalNumberOfExtraTime =
       history.arrivalNumberOfNextReading;
@@ -542,9 +542,9 @@ export class EvaluationRequest {
     activityHistory: PhoneActivityHistory,
     nowMs: number
   ): void {
-    this.rememberStep(EvaluationStep.AnswerFromHistory);
+    this.rememberStep(RequestStep.AnswerFromHistory);
 
-    const report = buildAssessment(
+    const report = buildReport(
       history.readings,
       activityHistory,
       nowMs,
@@ -555,11 +555,11 @@ export class EvaluationRequest {
     this.finishWith(report, nowMs);
   }
 
-  private finishWith(assessment: Assessment, nowMs: number): void {
-    this.rememberStep(EvaluationStep.Finished);
+  private finishWith(built: Report, nowMs: number): void {
+    this.rememberStep(RequestStep.Finished);
 
     const report = new FinishedReport();
-    report.assessment = assessment;
+    report.built = built;
     report.requestId = this.requestId_;
     report.sessionId = this.sessionId_;
     report.steps = [...this.steps_];
@@ -569,12 +569,12 @@ export class EvaluationRequest {
     report.readingsReceived = this.readingsReceived_;
     report.readingsKept = this.readingsKept_;
     report.durationMs = notNegative(nowMs - this.startedAtMs_);
-    report.reasons = new Set([...assessment.reasons, ...this.reasons_]);
+    report.reasons = new Set([...built.reasons, ...this.reasons_]);
 
     const readingsHadBrokenTime =
       this.reasons_.has(RequestReason.LocationAgeUnreliable) ||
       this.reasons_.has(RequestReason.LocationInvalidTimestamp);
-    report.ageIsUnreliable = !assessment.hasPosition && readingsHadBrokenTime;
+    report.ageIsUnreliable = !built.hasPosition && readingsHadBrokenTime;
 
     this.report_ = report;
     this.phase_ = Phase.Finished;
@@ -594,18 +594,18 @@ export function phoneWhereEverythingWorks(): DeviceState {
   return device;
 }
 
-function usualSettings(): EvaluationSettings {
-  const settings = new EvaluationSettings();
+function usualSettings(): RequestSettings {
+  const settings = new RequestSettings();
   settings.asked.usePhoneActivity = false;
   settings.device = phoneWhereEverythingWorks();
   return settings;
 }
 
-// One evaluation together with the memory it reads from.
-class OneEvaluation {
+// One request together with the memory it reads from.
+class PhoneWithOneRequest {
   readings: LocationReading[] = [];
   phoneActivity: PhoneActivityHistory = new PhoneActivityHistory();
-  request: EvaluationRequest = new EvaluationRequest();
+  request: ProximityRequest = new ProximityRequest();
 
   history(): HistoryRightNow {
     return {
@@ -614,7 +614,7 @@ class OneEvaluation {
     };
   }
 
-  start(seconds: number, settings: EvaluationSettings = usualSettings()): void {
+  start(seconds: number, settings: RequestSettings = usualSettings()): void {
     this.request.start(
       7,
       0,
@@ -648,26 +648,26 @@ class OneEvaluation {
     );
   }
 
-  stop(seconds: number, why: WhyTheEvaluationStopped): void {
+  stop(seconds: number, why: WhyTheRequestStopped): void {
     this.request.stop(why, this.history(), this.phoneActivity, seconds * 1000);
   }
 }
 
 function show(
   text: string,
-  evaluation: OneEvaluation,
+  phone: PhoneWithOneRequest,
   expected: Readonly<{
-    status: AssessmentStatus;
+    status: ReportStatus;
     steps: string;
     durationMs: number;
   }>
 ): void {
-  const report = evaluation.request.report();
+  const report = phone.request.report();
   const steps = report.steps.join(', ');
 
   const upToDate =
-    evaluation.request.isFinished() &&
-    report.assessment.status === expected.status &&
+    phone.request.isFinished() &&
+    report.built.status === expected.status &&
     steps === expected.steps &&
     report.durationMs === expected.durationMs;
   if (!upToDate) {
@@ -678,44 +678,44 @@ function show(
 
   console.log(text);
   console.log(
-    `  ${AssessmentStatus[report.assessment.status]} after ${report.durationMs} ms` +
-      `   score ${report.assessment.score.qualityScore}`
+    `  ${ReportStatus[report.built.status]} after ${report.durationMs} ms` +
+      `   score ${report.built.score.qualityScore}`
   );
   console.log(`  steps: ${steps}`);
   console.log(`  reasons: ${[...report.reasons].join(', ')}`);
 }
 
 if (import.meta.main) {
-  const quick = new OneEvaluation();
+  const quick = new PhoneWithOneRequest();
   quick.start(0);
   quick.gpsDelivers(1.2, 20, 8);
   show('a good reading arrives quickly', quick, {
-    status: AssessmentStatus.Available,
+    status: ReportStatus.Available,
     steps: 'started, first_attempt, finished',
     durationMs: 1200,
   });
 
-  const weakThenGood = new OneEvaluation();
+  const weakThenGood = new PhoneWithOneRequest();
   weakThenGood.start(0);
   weakThenGood.gpsDelivers(1, 20, 500);
   weakThenGood.gpsDelivers(3, 20, 8);
   show('the first reading is weak, a good one comes later', weakThenGood, {
-    status: AssessmentStatus.Available,
+    status: ReportStatus.Available,
     steps: 'started, first_attempt, extra_time, finished',
     durationMs: 3000,
   });
 
-  const nothing = new OneEvaluation();
+  const nothing = new PhoneWithOneRequest();
   nothing.start(0);
   nothing.timePasses(4.5);
   nothing.timePasses(11.5);
   show('the GPS never answers and nothing is remembered', nothing, {
-    status: AssessmentStatus.Unavailable,
+    status: ReportStatus.Unavailable,
     steps: 'started, first_attempt, extra_time, answer_from_history, finished',
     durationMs: 11500,
   });
 
-  const remembered = new OneEvaluation();
+  const remembered = new PhoneWithOneRequest();
   remembered.readings.push(readingNorth(0, 20, 8, 1));
   remembered.phoneActivity.store({
     startedAtMs: 0,
@@ -732,18 +732,18 @@ if (import.meta.main) {
     'nothing new, but the phone stood still since a remembered reading',
     remembered,
     {
-      status: AssessmentStatus.Degraded,
+      status: ReportStatus.Degraded,
       steps: 'started, first_attempt, answer_from_history, finished',
       durationMs: 4500,
     }
   );
 
-  const cancelled = new OneEvaluation();
+  const cancelled = new PhoneWithOneRequest();
   cancelled.start(0);
-  cancelled.stop(2, WhyTheEvaluationStopped.CancelledByTheApp);
+  cancelled.stop(2, WhyTheRequestStopped.CancelledByTheApp);
   cancelled.gpsDelivers(2.5, 20, 8);
   show('the app cancels, and a late reading changes nothing', cancelled, {
-    status: AssessmentStatus.Cancelled,
+    status: ReportStatus.Cancelled,
     steps: 'started, first_attempt, finished',
     durationMs: 2000,
   });

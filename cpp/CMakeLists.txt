@@ -12,10 +12,10 @@ option(LCE_SANITIZE "Build with AddressSanitizer and UndefinedBehaviorSanitizer"
 option(LCE_WERROR "Treat warnings as errors (host builds only)" OFF)
 
 add_library(location_confidence_core STATIC
-  src/Assessment.cpp
+  src/Report.cpp
   src/CFacade.cpp
   src/Engine.cpp
-  src/EvaluationRequest.cpp
+  src/ProximityRequest.cpp
   src/GeoMath.cpp
   src/JumpDetector.cpp
   src/LocationHistory.cpp
@@ -57,9 +57,9 @@ if(LCE_BUILD_TESTS)
   enable_testing()
   add_executable(lce_tests
     tests/TestMain.cpp
-    tests/TestAssessment.cpp
+    tests/TestReport.cpp
     tests/TestEngine.cpp
-    tests/TestEvaluationRequest.cpp
+    tests/TestProximityRequest.cpp
     tests/TestFacade.cpp
     tests/TestGeoMath.cpp
     tests/TestHistory.cpp

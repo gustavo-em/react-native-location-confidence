@@ -19,7 +19,7 @@
  *
  *   2. Tell it what happens:
  *        the app opened a session        lce_open_session()
- *        the app asked for an evaluation lce_start_evaluation()
+ *        the app made a request          lce_start_evaluation()
  *        the GPS delivered readings      lce_readings_arrived()
  *        the timer fired                 lce_time_passed()
  *        ...
@@ -78,7 +78,7 @@ uint32_t lce_abi_version(void);
 #define LCE_OK 0
 /* A pointer that must point to something was null. Nothing was done. */
 #define LCE_ERROR_NULL_ARGUMENT 1
-/* The address or the radius of an evaluation makes no sense. Nothing was
+/* The address or the radius of a request makes no sense. Nothing was
  * started. This is a mistake of the calling code. */
 #define LCE_ERROR_INVALID_REQUEST 2
 /* The platform is not taking the finished reports. Nothing was started. */
@@ -185,7 +185,7 @@ typedef struct lce_device_state {
 
 /* What the app chose when it opened a session. */
 typedef struct lce_session_settings {
-  /* 0: the session only remembers the readings of its evaluations.
+  /* 0: the session only remembers the readings of its requests.
    * 1: the session keeps collecting readings while it is open. */
   int32_t keep_collecting_readings;
   int64_t time_between_readings_ms;   /* only used when collecting */
@@ -193,7 +193,7 @@ typedef struct lce_session_settings {
   lce_device_state device;
 } lce_session_settings;
 
-/* What the app asked for in one evaluation. */
+/* What the app asked for in one request. */
 typedef struct lce_evaluation_settings {
   /* The address, and how close to it counts as "there". */
   double destination_latitude;
@@ -271,10 +271,10 @@ typedef struct lce_platform_work {
 /* A report can list at most this many steps. */
 #define LCE_MAX_STEPS_IN_REPORT 8
 
-/* The final report of one evaluation. */
+/* The final report of one request. */
 typedef struct lce_report {
   uint32_t request_id;
-  uint32_t session_id; /* 0: the evaluation had no session */
+  uint32_t session_id; /* 0: the request had no session */
 
   int32_t status; /* LCE_STATUS_... */
   int32_t source; /* LCE_SOURCE_... */
@@ -320,7 +320,7 @@ typedef struct lce_report {
   /* Why the report says what it says. One bit for each reason. */
   uint64_t reasons;
 
-  /* The steps the evaluation went through; lce_step_name() gives the text. */
+  /* The steps the request went through; lce_step_name() gives the text. */
   int32_t steps[LCE_MAX_STEPS_IN_REPORT];
   int32_t how_many_steps;
 
@@ -330,7 +330,7 @@ typedef struct lce_report {
    * -1 when it did not. */
   int32_t fallback_cause;
 
-  uint32_t readings_received; /* delivered by the GPS during the evaluation */
+  uint32_t readings_received; /* delivered by the GPS during the request */
   uint32_t readings_kept;     /* of those, how many were stored */
   uint32_t readings_examined; /* readings in memory when the report was built */
   uint32_t gps_jumps_found;
@@ -363,14 +363,14 @@ int32_t lce_open_session(lce_engine* engine,
 /* Forgets the readings of a session; the session stays open. */
 int32_t lce_clear_session_history(lce_engine* engine, uint32_t session_id);
 
-/* Closes a session: its evaluations stop and its readings are forgotten.
+/* Closes a session: its requests stop and its readings are forgotten.
  * Closing a session that does not exist is not an error. */
 int32_t lce_close_session(lce_engine* engine, uint32_t session_id, int64_t now_ms);
 
-/* --- Evaluations --- */
+/* --- Requests --- */
 
-/* Starts an evaluation. `session_id` 0 means "no session".
- * On LCE_OK, `*request_id` identifies the evaluation and its report will
+/* Starts a request. `session_id` 0 means "no session".
+ * On LCE_OK, `*request_id` identifies the request and its report will
  * come out of lce_take_finished_report(), maybe right away. */
 int32_t lce_start_evaluation(lce_engine* engine,
                              uint32_t session_id,
@@ -378,7 +378,7 @@ int32_t lce_start_evaluation(lce_engine* engine,
                              int64_t now_ms,
                              uint32_t* request_id);
 
-/* Cancels an evaluation. Cancelling one that already ended does nothing. */
+/* Cancels a request. Cancelling one that already ended does nothing. */
 int32_t lce_cancel_evaluation(lce_engine* engine, uint32_t request_id, int64_t now_ms);
 
 /* --- Things that happen --- */

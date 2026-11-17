@@ -34,7 +34,7 @@ lce_device_state deviceWhereEverythingWorks() {
 }
 
 // The usual limits, written out the way the JavaScript side fills them.
-lce_evaluation_settings usualEvaluation() {
+lce_evaluation_settings usualRequest() {
   lce_evaluation_settings settings{};
   settings.destination_latitude = 0.0;
   settings.destination_longitude = 0.0;
@@ -126,12 +126,12 @@ TEST_CASE("facade: ABI version matches the header") {
 // Android tests and through Swift in the iOS tests. If the three agree, the
 // values cross each bridge without being changed.
 
-TEST_CASE("golden scenario: one evaluation, one reading, every field of the report") {
+TEST_CASE("golden scenario: one request, one reading, every field of the report") {
   EngineForTest test;
   REQUIRE(test.engine != nullptr);
 
   // second 0: the app asks.
-  const lce_evaluation_settings settings = usualEvaluation();
+  const lce_evaluation_settings settings = usualRequest();
   uint32_t requestId = 0;
   REQUIRE(lce_start_evaluation(test.engine, 0, &settings, 0, &requestId) == LCE_OK);
   CHECK(requestId == 1);
@@ -212,11 +212,11 @@ TEST_CASE("golden scenario: one evaluation, one reading, every field of the repo
   CHECK(work.wake_up_is_wanted == 0);
 }
 
-// --- Evaluations that end in other ways --------------------------------------------------
+// --- Requests that end in other ways --------------------------------------------------
 
-TEST_CASE("facade: the timer alone ends an evaluation that gets no reading") {
+TEST_CASE("facade: the timer alone ends a request that gets no reading") {
   EngineForTest test;
-  const lce_evaluation_settings settings = usualEvaluation();
+  const lce_evaluation_settings settings = usualRequest();
   uint32_t requestId = 0;
   REQUIRE(lce_start_evaluation(test.engine, 0, &settings, 1000, &requestId) == LCE_OK);
 
@@ -258,7 +258,7 @@ TEST_CASE("facade: the timer alone ends an evaluation that gets no reading") {
 }
 
 TEST_CASE("facade: cancel, background, permission lost and a GPS failure") {
-  const lce_evaluation_settings settings = usualEvaluation();
+  const lce_evaluation_settings settings = usualRequest();
 
   SUBCASE("cancel") {
     EngineForTest test;
@@ -330,12 +330,12 @@ TEST_CASE("facade: a session is opened, used, cleared and closed") {
   CHECK(work.phone_activity_updates_are_wanted == 0);
   CHECK(work.wake_up_at_ms == 900000);
 
-  // The session collects a reading; an evaluation that gets nothing new
+  // The session collects a reading; a request that gets nothing new
   // answers with it.
   const lce_reading reading = readingNorth(0, 20.0, 8.0);
   lce_readings_arrived(test.engine, &reading, 1, 0);
 
-  const lce_evaluation_settings settings = usualEvaluation();
+  const lce_evaluation_settings settings = usualRequest();
   uint32_t requestId = 0;
   REQUIRE(lce_start_evaluation(test.engine, opened.session_id, &settings, 2000, &requestId) ==
           LCE_OK);
@@ -351,7 +351,7 @@ TEST_CASE("facade: a session is opened, used, cleared and closed") {
   CHECK(reports[0].readings_received == 0);
   CHECK(reports[0].readings_examined == 1);
 
-  // Clearing: the next evaluation has nothing to fall back on.
+  // Clearing: the next request has nothing to fall back on.
   CHECK(lce_clear_session_history(test.engine, opened.session_id) == LCE_OK);
   lce_start_evaluation(test.engine, opened.session_id, &settings, 20000, &requestId);
   lce_time_passed(test.engine, 24500);
@@ -360,7 +360,7 @@ TEST_CASE("facade: a session is opened, used, cleared and closed") {
   REQUIRE(reports.size() == 1);
   CHECK(reports[0].status == LCE_STATUS_UNAVAILABLE);
 
-  // Closing stops the evaluation that is running and turns everything off.
+  // Closing stops the request that is running and turns everything off.
   lce_start_evaluation(test.engine, opened.session_id, &settings, 40000, &requestId);
   REQUIRE(lce_close_session(test.engine, opened.session_id, 41000) == LCE_OK);
   reports = takeEveryReport(test.engine);
@@ -410,7 +410,7 @@ TEST_CASE("facade: the phone activity goes in and comes out") {
   REQUIRE(lce_phone_activity_changed(test.engine, LCE_ACTIVITY_STANDING_STILL,
                                      LCE_CONFIDENCE_HIGH, 0, 500) == LCE_OK);
 
-  const lce_evaluation_settings settings = usualEvaluation();
+  const lce_evaluation_settings settings = usualRequest();
   uint32_t requestId = 0;
   lce_start_evaluation(test.engine, opened.session_id, &settings, 10000, &requestId);
   lce_time_passed(test.engine, 14500);
@@ -443,7 +443,7 @@ TEST_CASE("facade: readings made up by the app are marked") {
   EngineForTest test;
   REQUIRE(lce_set_readings_are_simulated(test.engine, 1) == LCE_OK);
 
-  const lce_evaluation_settings settings = usualEvaluation();
+  const lce_evaluation_settings settings = usualRequest();
   uint32_t requestId = 0;
   lce_start_evaluation(test.engine, 0, &settings, 0, &requestId);
   const lce_reading reading = readingNorth(1000, 20.0, 8.0);
@@ -480,7 +480,7 @@ TEST_CASE("GEO-012 GEO-014 GEO-015 GEO-016 an address or radius that makes no se
 
   for (const Case& oneCase : cases) {
     CAPTURE(oneCase.name);
-    lce_evaluation_settings settings = usualEvaluation();
+    lce_evaluation_settings settings = usualRequest();
     settings.destination_latitude = oneCase.latitude;
     settings.destination_longitude = oneCase.longitude;
     settings.radius_meters = oneCase.radius;
@@ -503,7 +503,7 @@ TEST_CASE("PLT-029 numbers that are not one of the choices become the cautious c
   EngineForTest test;
 
   SUBCASE("an unknown permission counts as 'never asked'") {
-    lce_evaluation_settings settings = usualEvaluation();
+    lce_evaluation_settings settings = usualRequest();
     settings.device.location_permission = 99;
 
     uint32_t requestId = 0;
@@ -515,7 +515,7 @@ TEST_CASE("PLT-029 numbers that are not one of the choices become the cautious c
   }
 
   SUBCASE("an unknown provider state counts as 'no provider'") {
-    lce_evaluation_settings settings = usualEvaluation();
+    lce_evaluation_settings settings = usualRequest();
     settings.device.location_provider = -3;
 
     uint32_t requestId = 0;
@@ -526,7 +526,7 @@ TEST_CASE("PLT-029 numbers that are not one of the choices become the cautious c
   }
 
   SUBCASE("unknown precision, activity support and mock policy") {
-    lce_evaluation_settings settings = usualEvaluation();
+    lce_evaluation_settings settings = usualRequest();
     settings.device.permission_precision = 42;
     settings.device.phone_activity_support = 42;
     settings.mock_policy = 42;  // counts as the strict policy: score 0
@@ -554,7 +554,7 @@ TEST_CASE("PLT-029 numbers that are not one of the choices become the cautious c
   }
 
   SUBCASE("an unknown mock signal counts as 'the system said nothing'") {
-    const lce_evaluation_settings settings = usualEvaluation();
+    const lce_evaluation_settings settings = usualRequest();
     uint32_t requestId = 0;
     lce_start_evaluation(test.engine, 0, &settings, 0, &requestId);
 
@@ -577,7 +577,7 @@ TEST_CASE("PLT-029 numbers that are not one of the choices become the cautious c
 
     REQUIRE(lce_phone_activity_changed(test.engine, 77, 77, 0, 0) == LCE_OK);
 
-    const lce_evaluation_settings settings = usualEvaluation();
+    const lce_evaluation_settings settings = usualRequest();
     uint32_t requestId = 0;
     lce_start_evaluation(test.engine, opened.session_id, &settings, 5000, &requestId);
     lce_time_passed(test.engine, 9500);
@@ -592,7 +592,7 @@ TEST_CASE("PLT-029 numbers that are not one of the choices become the cautious c
 
 TEST_CASE("facade: a null pointer gives an error code and never a crash") {
   EngineForTest test;
-  const lce_evaluation_settings evaluation = usualEvaluation();
+  const lce_evaluation_settings request = usualRequest();
   const lce_session_settings session = sessionThatKeepsCollecting();
   const lce_reading reading = readingNorth(0, 20.0, 8.0);
   lce_session_opened opened{};
@@ -604,7 +604,7 @@ TEST_CASE("facade: a null pointer gives an error code and never a crash") {
   CHECK(lce_open_session(nullptr, &session, 0, &opened) == LCE_ERROR_NULL_ARGUMENT);
   CHECK(lce_clear_session_history(nullptr, 1) == LCE_ERROR_NULL_ARGUMENT);
   CHECK(lce_close_session(nullptr, 1, 0) == LCE_ERROR_NULL_ARGUMENT);
-  CHECK(lce_start_evaluation(nullptr, 0, &evaluation, 0, &requestId) == LCE_ERROR_NULL_ARGUMENT);
+  CHECK(lce_start_evaluation(nullptr, 0, &request, 0, &requestId) == LCE_ERROR_NULL_ARGUMENT);
   CHECK(lce_cancel_evaluation(nullptr, 1, 0) == LCE_ERROR_NULL_ARGUMENT);
   CHECK(lce_readings_arrived(nullptr, &reading, 1, 0) == LCE_ERROR_NULL_ARGUMENT);
   CHECK(lce_phone_activity_changed(nullptr, 0, 0, 0, 0) == LCE_ERROR_NULL_ARGUMENT);
@@ -622,7 +622,7 @@ TEST_CASE("facade: a null pointer gives an error code and never a crash") {
   CHECK(lce_open_session(test.engine, nullptr, 0, &opened) == LCE_ERROR_NULL_ARGUMENT);
   CHECK(lce_open_session(test.engine, &session, 0, nullptr) == LCE_ERROR_NULL_ARGUMENT);
   CHECK(lce_start_evaluation(test.engine, 0, nullptr, 0, &requestId) == LCE_ERROR_NULL_ARGUMENT);
-  CHECK(lce_start_evaluation(test.engine, 0, &evaluation, 0, nullptr) == LCE_ERROR_NULL_ARGUMENT);
+  CHECK(lce_start_evaluation(test.engine, 0, &request, 0, nullptr) == LCE_ERROR_NULL_ARGUMENT);
   CHECK(lce_readings_arrived(test.engine, nullptr, 3, 0) == LCE_ERROR_NULL_ARGUMENT);
   CHECK(lce_what_the_platform_must_do_now(test.engine, nullptr) == LCE_ERROR_NULL_ARGUMENT);
   CHECK(lce_take_finished_report(test.engine, nullptr) == 0);
@@ -652,9 +652,9 @@ TEST_CASE("facade: taking a report when none is waiting leaves the struct alone"
 
 namespace {
 
-// Runs one evaluation with no session: the reading arrives 1 second after the
+// Runs one request with no session: the reading arrives 1 second after the
 // start, and the timers fire until a report comes out.
-lce_report evaluateWith(const lce_evaluation_settings& settings, const lce_reading& reading) {
+lce_report reportWith(const lce_evaluation_settings& settings, const lce_reading& reading) {
   EngineForTest test;
   uint32_t requestId = 0;
   REQUIRE(lce_start_evaluation(test.engine, 0, &settings, 0, &requestId) == LCE_OK);
@@ -668,62 +668,62 @@ lce_report evaluateWith(const lce_evaluation_settings& settings, const lce_readi
 
 }  // namespace
 
-TEST_CASE("facade: each field of the evaluation settings arrives") {
+TEST_CASE("facade: each field of the request settings arrives") {
   const lce_reading reading = readingNorth(0, 20.0, 8.0);  // 1 second old when it arrives
 
   SUBCASE("the address") {
-    lce_evaluation_settings settings = usualEvaluation();
+    lce_evaluation_settings settings = usualRequest();
     settings.destination_latitude = 0.0;
     settings.destination_longitude = 0.01;  // about 1.1 km east
 
-    const lce_report report = evaluateWith(settings, reading);
+    const lce_report report = reportWith(settings, reading);
     CHECK(report.distance_to_destination_meters > 1000.0);
     CHECK(report.relation == LCE_RELATION_SUPPORTS_OUTSIDE);
 
     settings.destination_latitude = 0.01;  // about 1.1 km north
     settings.destination_longitude = 0.0;
-    const lce_report other = evaluateWith(settings, reading);
+    const lce_report other = reportWith(settings, reading);
     CHECK(other.distance_to_destination_meters > 1000.0);
     CHECK(other.distance_to_destination_meters != report.distance_to_destination_meters);
   }
 
   SUBCASE("the radius") {
-    lce_evaluation_settings settings = usualEvaluation();
+    lce_evaluation_settings settings = usualRequest();
     settings.radius_meters = 60.0;  // 20 + 53 = 73 no longer fits
-    const lce_report report = evaluateWith(settings, reading);
+    const lce_report report = reportWith(settings, reading);
     CHECK(report.radius_meters == 60.0);
     CHECK(report.relation == LCE_RELATION_INCONCLUSIVE);
   }
 
   SUBCASE("how old a reading can be and still count as fresh") {
-    lce_evaluation_settings settings = usualEvaluation();
+    lce_evaluation_settings settings = usualRequest();
     settings.newest_age_that_counts_as_fresh_ms = 500;  // the reading is 1000 ms old
-    const lce_report report = evaluateWith(settings, reading);
+    const lce_report report = reportWith(settings, reading);
     CHECK(report.source == LCE_SOURCE_CACHED);
     CHECK(hasReason(report.reasons, "location_stale"));
   }
 
   SUBCASE("how old a reading can be and still be used") {
-    lce_evaluation_settings settings = usualEvaluation();
+    lce_evaluation_settings settings = usualRequest();
     settings.newest_age_that_counts_as_fresh_ms = 500;
     settings.oldest_age_allowed_ms = 900;  // the reading is 1000 ms old
-    const lce_report report = evaluateWith(settings, reading);
+    const lce_report report = reportWith(settings, reading);
     CHECK(report.has_position == 0);
     CHECK(report.status == LCE_STATUS_UNAVAILABLE);
   }
 
   SUBCASE("the worst GPS error accepted") {
-    lce_evaluation_settings settings = usualEvaluation();
+    lce_evaluation_settings settings = usualRequest();
     settings.worst_gps_error_accepted_meters = 7.0;  // the reading has 8
-    const lce_report report = evaluateWith(settings, reading);
+    const lce_report report = reportWith(settings, reading);
     CHECK(report.status == LCE_STATUS_DEGRADED);
     CHECK(hasReason(report.reasons, "location_low_accuracy"));
   }
 
   SUBCASE("the fastest possible speed") {
-    lce_evaluation_settings settings = usualEvaluation();
+    lce_evaluation_settings settings = usualRequest();
     settings.fastest_possible_speed_mps = 5.0;
-    const lce_report report = evaluateWith(settings, reading);
+    const lce_report report = reportWith(settings, reading);
     CHECK(report.how_far_phone_could_be_meters == 13.0);  // 8 + 5 x 1 second
   }
 
@@ -734,7 +734,7 @@ TEST_CASE("facade: each field of the evaluation settings arrives") {
     lce_open_session(test.engine, &sessionSettings, 0, &opened);
     lce_readings_arrived(test.engine, &reading, 1, 0);  // a reading in the history
 
-    lce_evaluation_settings settings = usualEvaluation();
+    lce_evaluation_settings settings = usualRequest();
     settings.allow_answer_from_history = 0;
     uint32_t requestId = 0;
     lce_start_evaluation(test.engine, opened.session_id, &settings, 1000, &requestId);
@@ -748,7 +748,7 @@ TEST_CASE("facade: each field of the evaluation settings arrives") {
 
   SUBCASE("not using the phone activity") {
     EngineForTest test;
-    lce_evaluation_settings settings = usualEvaluation();
+    lce_evaluation_settings settings = usualRequest();
     settings.use_phone_activity = 0;
     uint32_t requestId = 0;
     lce_start_evaluation(test.engine, 0, &settings, 0, &requestId);
@@ -762,13 +762,13 @@ TEST_CASE("facade: each field of the evaluation settings arrives") {
     lce_reading simulated = reading;
     simulated.mock_signal = LCE_MOCK_FLAGGED;
 
-    lce_evaluation_settings strict = usualEvaluation();
+    lce_evaluation_settings strict = usualRequest();
     strict.mock_policy = LCE_MOCK_POLICY_ZERO_SCORE;
-    CHECK(evaluateWith(strict, simulated).quality_score == 0);
+    CHECK(reportWith(strict, simulated).quality_score == 0);
 
-    lce_evaluation_settings onlyTell = usualEvaluation();
+    lce_evaluation_settings onlyTell = usualRequest();
     onlyTell.mock_policy = LCE_MOCK_POLICY_FLAG_ONLY;
-    const lce_report report = evaluateWith(onlyTell, simulated);
+    const lce_report report = reportWith(onlyTell, simulated);
     CHECK(report.quality_score == 75);
     CHECK(report.status == LCE_STATUS_AVAILABLE);
     CHECK(hasReason(report.reasons, "possible_mock_location"));
@@ -776,7 +776,7 @@ TEST_CASE("facade: each field of the evaluation settings arrives") {
 
   SUBCASE("the three times") {
     EngineForTest test;
-    lce_evaluation_settings settings = usualEvaluation();
+    lce_evaluation_settings settings = usualRequest();
     settings.total_time_allowed_ms = 9000;
     settings.first_attempt_time_ms = 2000;
     settings.extra_time_ms = 3000;
@@ -819,9 +819,9 @@ TEST_CASE("facade: each field of the device state arrives") {
         {LCE_PERMISSION_RESTRICTED, "permission_restricted"},
     };
     for (const Case& oneCase : cases) {
-      lce_evaluation_settings settings = usualEvaluation();
+      lce_evaluation_settings settings = usualRequest();
       settings.device.location_permission = oneCase.permission;
-      const lce_report report = evaluateWith(settings, reading);
+      const lce_report report = reportWith(settings, reading);
       CHECK(report.status == LCE_STATUS_UNAVAILABLE);
       CHECK(hasReason(report.reasons, oneCase.reason));
       CHECK(report.duration_ms == 0);  // it ended at the start
@@ -829,9 +829,9 @@ TEST_CASE("facade: each field of the device state arrives") {
   }
 
   SUBCASE("an approximate permission") {
-    lce_evaluation_settings settings = usualEvaluation();
+    lce_evaluation_settings settings = usualRequest();
     settings.device.permission_precision = LCE_PRECISION_APPROXIMATE;
-    const lce_report report = evaluateWith(settings, reading);
+    const lce_report report = reportWith(settings, reading);
     CHECK(report.permission_precision == LCE_PRECISION_APPROXIMATE);
     CHECK(report.status == LCE_STATUS_DEGRADED);
     CHECK((report.limits_applied & (1u << 1)) != 0);  // limit number 1
@@ -841,61 +841,61 @@ TEST_CASE("facade: each field of the device state arrives") {
   }
 
   SUBCASE("location turned off") {
-    lce_evaluation_settings settings = usualEvaluation();
+    lce_evaluation_settings settings = usualRequest();
     settings.device.location_is_turned_on = 0;
-    CHECK(hasReason(evaluateWith(settings, reading).reasons, "location_services_disabled"));
+    CHECK(hasReason(reportWith(settings, reading).reasons, "location_services_disabled"));
   }
 
   SUBCASE("any number that is not zero means yes") {
-    lce_evaluation_settings settings = usualEvaluation();
+    lce_evaluation_settings settings = usualRequest();
     settings.device.location_is_turned_on = 7;
     settings.device.app_is_in_foreground = -1;
-    CHECK(evaluateWith(settings, reading).status == LCE_STATUS_AVAILABLE);
+    CHECK(reportWith(settings, reading).status == LCE_STATUS_AVAILABLE);
   }
 
   SUBCASE("no Google Play services") {
-    lce_evaluation_settings settings = usualEvaluation();
+    lce_evaluation_settings settings = usualRequest();
     settings.device.location_provider = LCE_PROVIDER_STATE_PLAY_SERVICES_MISSING;
-    CHECK(hasReason(evaluateWith(settings, reading).reasons, "play_services_unavailable"));
+    CHECK(hasReason(reportWith(settings, reading).reasons, "play_services_unavailable"));
   }
 
   SUBCASE("no location provider") {
-    lce_evaluation_settings settings = usualEvaluation();
+    lce_evaluation_settings settings = usualRequest();
     settings.device.location_provider = LCE_PROVIDER_STATE_UNAVAILABLE;
-    CHECK(hasReason(evaluateWith(settings, reading).reasons, "native_provider_unavailable"));
+    CHECK(hasReason(reportWith(settings, reading).reasons, "native_provider_unavailable"));
   }
 
   SUBCASE("the app is not in the foreground") {
-    lce_evaluation_settings settings = usualEvaluation();
+    lce_evaluation_settings settings = usualRequest();
     settings.device.app_is_in_foreground = 0;
-    CHECK(hasReason(evaluateWith(settings, reading).reasons, "foreground_required"));
+    CHECK(hasReason(reportWith(settings, reading).reasons, "foreground_required"));
   }
 
   SUBCASE("the phone activity permission was denied") {
-    lce_evaluation_settings settings = usualEvaluation();
+    lce_evaluation_settings settings = usualRequest();
     settings.device.phone_activity_support = LCE_ACTIVITY_SUPPORT_PERMISSION_DENIED;
-    const lce_report report = evaluateWith(settings, reading);
+    const lce_report report = reportWith(settings, reading);
     CHECK(report.status == LCE_STATUS_AVAILABLE);
     CHECK(hasReason(report.reasons, "motion_permission_denied"));
   }
 
   SUBCASE("the phone cannot report its activity") {
-    lce_evaluation_settings settings = usualEvaluation();
+    lce_evaluation_settings settings = usualRequest();
     settings.device.phone_activity_support = LCE_ACTIVITY_SUPPORT_NOT_SUPPORTED;
-    CHECK(hasReason(evaluateWith(settings, reading).reasons, "motion_unavailable"));
+    CHECK(hasReason(reportWith(settings, reading).reasons, "motion_unavailable"));
 
     settings.device.phone_activity_support = LCE_ACTIVITY_SUPPORT_PERMISSION_NOT_ASKED;
-    CHECK(hasReason(evaluateWith(settings, reading).reasons, "motion_unavailable"));
+    CHECK(hasReason(reportWith(settings, reading).reasons, "motion_unavailable"));
   }
 }
 
 TEST_CASE("facade: each field of a reading arrives") {
-  const lce_evaluation_settings settings = usualEvaluation();
+  const lce_evaluation_settings settings = usualRequest();
 
   SUBCASE("the position") {
     lce_reading reading = readingNorth(0, 20.0, 8.0);
     reading.longitude = 0.0001;
-    const lce_report report = evaluateWith(settings, reading);
+    const lce_report report = reportWith(settings, reading);
     CHECK(report.latitude == reading.latitude);
     CHECK(report.longitude == 0.0001);
   }
@@ -903,7 +903,7 @@ TEST_CASE("facade: each field of a reading arrives") {
   SUBCASE("no GPS error given") {
     lce_reading reading = readingNorth(0, 20.0, 8.0);
     reading.has_accuracy = 0;
-    const lce_report report = evaluateWith(settings, reading);
+    const lce_report report = reportWith(settings, reading);
     CHECK(report.has_position == 0);
     CHECK(hasReason(report.reasons, "location_accuracy_unavailable"));
   }
@@ -911,7 +911,7 @@ TEST_CASE("facade: each field of a reading arrives") {
   SUBCASE("a time that cannot be trusted") {
     lce_reading reading = readingNorth(0, 20.0, 8.0);
     reading.time_is_reliable = 0;
-    const lce_report report = evaluateWith(settings, reading);
+    const lce_report report = reportWith(settings, reading);
     CHECK(report.has_position == 0);
     CHECK(report.age_reliability == LCE_AGE_UNRELIABLE);
     CHECK(hasReason(report.reasons, "location_age_unreliable"));
@@ -920,13 +920,13 @@ TEST_CASE("facade: each field of a reading arrives") {
   SUBCASE("a time worked out from the wall clock") {
     lce_reading reading = readingNorth(0, 20.0, 8.0);
     reading.capture_time_was_estimated = 1;
-    CHECK(evaluateWith(settings, reading).age_reliability == LCE_AGE_ESTIMATED);
+    CHECK(reportWith(settings, reading).age_reliability == LCE_AGE_ESTIMATED);
   }
 
   SUBCASE("taken with an approximate permission") {
     lce_reading reading = readingNorth(0, 20.0, 8.0);
     reading.only_approximate_permission = 1;
-    const lce_report report = evaluateWith(settings, reading);
+    const lce_report report = reportWith(settings, reading);
     CHECK(report.status == LCE_STATUS_DEGRADED);
     CHECK((report.limits_applied & (1u << 1)) != 0);  // "approximate_permission"
     CHECK(report.quality_score <= 30);
@@ -940,34 +940,34 @@ TEST_CASE("facade: each field of a reading arrives") {
     reading.has_speed_accuracy = 1;
     reading.speed_accuracy_mps = 0.5;
     // 1 second old: (0.3 + 2 x 0.5) x 1 + 2.5 x 1 x 1 / 2 = 2.55 meters.
-    CHECK(evaluateWith(settings, reading).how_far_phone_could_be_meters ==
+    CHECK(reportWith(settings, reading).how_far_phone_could_be_meters ==
           doctest::Approx(8.0 + 2.55));
 
     // The speed alone, with no error, is not enough to use it.
     reading.has_speed_accuracy = 0;
-    CHECK(evaluateWith(settings, reading).how_far_phone_could_be_meters == 53.0);
+    CHECK(reportWith(settings, reading).how_far_phone_could_be_meters == 53.0);
 
     // Neither is the error alone.
     reading.has_speed = 0;
     reading.has_speed_accuracy = 1;
-    CHECK(evaluateWith(settings, reading).how_far_phone_could_be_meters == 53.0);
+    CHECK(reportWith(settings, reading).how_far_phone_could_be_meters == 53.0);
   }
 
   SUBCASE("a direction that does not exist") {
     lce_reading reading = readingNorth(0, 20.0, 8.0);
     reading.has_heading = 1;
     reading.heading_degrees = 400.0;
-    const lce_report report = evaluateWith(settings, reading);
+    const lce_report report = reportWith(settings, reading);
     CHECK(report.status == LCE_STATUS_AVAILABLE);  // the reading is still used
     CHECK(hasReason(report.reasons, "location_metadata_inconsistent"));
 
     reading.heading_degrees = 90.0;
-    CHECK_FALSE(hasReason(evaluateWith(settings, reading).reasons,
+    CHECK_FALSE(hasReason(reportWith(settings, reading).reasons,
                           "location_metadata_inconsistent"));
 
     reading.has_heading = 0;
     reading.heading_degrees = 400.0;  // not looked at
-    CHECK_FALSE(hasReason(evaluateWith(settings, reading).reasons,
+    CHECK_FALSE(hasReason(reportWith(settings, reading).reasons,
                           "location_metadata_inconsistent"));
   }
 
@@ -979,8 +979,8 @@ TEST_CASE("facade: each field of a reading arrives") {
     for (const int32_t providerOfTheSecond : providers) {
       EngineForTest test;
       uint32_t requestId = 0;
-      lce_evaluation_settings strict = usualEvaluation();
-      strict.worst_gps_error_accepted_meters = 1.0;  // keep the evaluation running
+      lce_evaluation_settings strict = usualRequest();
+      strict.worst_gps_error_accepted_meters = 1.0;  // keep the request running
       lce_start_evaluation(test.engine, 0, &strict, 0, &requestId);
 
       lce_reading first = readingNorth(0, 0.0, 5.0);
@@ -1001,11 +1001,11 @@ TEST_CASE("facade: each field of a reading arrives") {
   SUBCASE("the simulation mark") {
     lce_reading reading = readingNorth(0, 20.0, 8.0);
     reading.mock_signal = LCE_MOCK_UNKNOWN;
-    CHECK(evaluateWith(settings, reading).mock_signal == LCE_MOCK_UNKNOWN);
+    CHECK(reportWith(settings, reading).mock_signal == LCE_MOCK_UNKNOWN);
     reading.mock_signal = LCE_MOCK_NOT_FLAGGED;
-    CHECK(evaluateWith(settings, reading).mock_signal == LCE_MOCK_NOT_FLAGGED);
+    CHECK(reportWith(settings, reading).mock_signal == LCE_MOCK_NOT_FLAGGED);
     reading.mock_signal = LCE_MOCK_FLAGGED;
-    CHECK(evaluateWith(settings, reading).mock_signal == LCE_MOCK_FLAGGED);
+    CHECK(reportWith(settings, reading).mock_signal == LCE_MOCK_FLAGGED);
   }
 }
 
@@ -1021,7 +1021,7 @@ TEST_CASE("facade: every activity and every confidence goes in and comes out") {
       EngineForTest test;
       REQUIRE(lce_phone_activity_changed(test.engine, activity, confidence, 0, 0) == LCE_OK);
 
-      const lce_evaluation_settings settings = usualEvaluation();
+      const lce_evaluation_settings settings = usualRequest();
       uint32_t requestId = 0;
       lce_start_evaluation(test.engine, 0, &settings, 0, &requestId);
       const lce_reading reading = readingNorth(1000, 20.0, 8.0);
@@ -1095,7 +1095,7 @@ TEST_CASE("facade: each field of the session settings arrives") {
 
 TEST_CASE("facade: when nobody takes the reports, starting is refused with its own code") {
   EngineForTest test;
-  const lce_evaluation_settings settings = usualEvaluation();
+  const lce_evaluation_settings settings = usualRequest();
 
   // Session 77 does not exist: each start leaves one report waiting.
   uint32_t requestId = 0;
@@ -1115,7 +1115,7 @@ TEST_CASE("facade: when nobody takes the reports, starting is refused with its o
 TEST_CASE("facade: a delivery longer than what is converted at a time is fully used") {
   EngineForTest test;
 
-  lce_evaluation_settings settings = usualEvaluation();
+  lce_evaluation_settings settings = usualRequest();
   settings.worst_gps_error_accepted_meters = 1.0;  // nothing is good enough: it keeps running
   uint32_t requestId = 0;
   lce_start_evaluation(test.engine, 0, &settings, 0, &requestId);
@@ -1158,7 +1158,7 @@ TEST_CASE("REC-029 the same script gives the same report, byte by byte") {
     lce_phone_activity_changed(test.engine, LCE_ACTIVITY_WALKING, LCE_CONFIDENCE_HIGH, 6000,
                                10000);
 
-    const lce_evaluation_settings settings = usualEvaluation();
+    const lce_evaluation_settings settings = usualRequest();
     uint32_t requestId = 0;
     lce_start_evaluation(test.engine, opened.session_id, &settings, 12000, &requestId);
     lce_time_passed(test.engine, 16500);
@@ -1212,11 +1212,11 @@ TEST_CASE("facade: many engines can be created and destroyed") {
     lce_engine* engine = lce_engine_create();
     REQUIRE(engine != nullptr);
 
-    const lce_evaluation_settings settings = usualEvaluation();
+    const lce_evaluation_settings settings = usualRequest();
     uint32_t requestId = 0;
     lce_start_evaluation(engine, 0, &settings, 0, &requestId);
     CHECK(requestId == 1);  // each engine counts on its own
 
-    lce_engine_destroy(engine);  // with an evaluation still running
+    lce_engine_destroy(engine);  // with a request still running
   }
 }

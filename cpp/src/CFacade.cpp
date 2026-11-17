@@ -16,9 +16,9 @@
 // =============================================================================
 //
 //   lce_start_evaluation(engine, session_id, settings, now_ms, request_id)
-//     |-- toEvaluationSettings()          C struct  ->  C++ struct
+//     |-- toRequestSettings()             C struct  ->  C++ struct
 //     |      `-- toDeviceState()
-//     `-- engine->engine.startEvaluation()                 (Engine.cpp)
+//     `-- engine->engine.startRequest()                    (Engine.cpp)
 //
 //   lce_readings_arrived(engine, readings, how_many, now_ms)
 //     |-- toUncheckedReading()            once for each reading
@@ -37,9 +37,9 @@
 #include <cstdint>
 #include <new>
 
-#include "Assessment.hpp"
+#include "Report.hpp"
 #include "Engine.hpp"
-#include "EvaluationRequest.hpp"
+#include "ProximityRequest.hpp"
 #include "QualityScore.hpp"
 #include "ReadingChecker.hpp"
 #include "ReasonCodes.hpp"
@@ -66,11 +66,11 @@ constexpr bool sameNumber(int numberInLceH, int numberInCpp) noexcept {
   return numberInLceH == numberInCpp;
 }
 
-static_assert(sameNumber(LCE_STATUS_AVAILABLE, static_cast<int>(AssessmentStatus::Available)), "");
-static_assert(sameNumber(LCE_STATUS_DEGRADED, static_cast<int>(AssessmentStatus::Degraded)), "");
-static_assert(sameNumber(LCE_STATUS_UNAVAILABLE, static_cast<int>(AssessmentStatus::Unavailable)),
+static_assert(sameNumber(LCE_STATUS_AVAILABLE, static_cast<int>(ReportStatus::Available)), "");
+static_assert(sameNumber(LCE_STATUS_DEGRADED, static_cast<int>(ReportStatus::Degraded)), "");
+static_assert(sameNumber(LCE_STATUS_UNAVAILABLE, static_cast<int>(ReportStatus::Unavailable)),
               "");
-static_assert(sameNumber(LCE_STATUS_CANCELLED, static_cast<int>(AssessmentStatus::Cancelled)), "");
+static_assert(sameNumber(LCE_STATUS_CANCELLED, static_cast<int>(ReportStatus::Cancelled)), "");
 
 static_assert(sameNumber(LCE_SOURCE_FRESH, static_cast<int>(FixSource::Fresh)), "");
 static_assert(sameNumber(LCE_SOURCE_RECOVERED, static_cast<int>(FixSource::Recovered)), "");
@@ -132,7 +132,7 @@ static_assert(sameNumber(LCE_COLLECTING_BLOCKED, static_cast<int>(CollectingStat
 static_assert(sameNumber(LCE_COLLECTING_STOPPED, static_cast<int>(CollectingState::Stopped)), "");
 
 static_assert(LCE_MAX_STEPS_IN_REPORT == MAX_STEPS_IN_REPORT,
-              "lce.h and Assessment.hpp disagree about how many steps a report holds");
+              "lce.h and Report.hpp disagree about how many steps a report holds");
 
 // The reasons travel as one bit each inside a 64-bit number, and the limits
 // of the score inside a 32-bit number. There must be enough bits.
@@ -249,8 +249,8 @@ SessionSettings toSessionSettings(const lce_session_settings& settings) noexcept
   return result;
 }
 
-EvaluationSettings toEvaluationSettings(const lce_evaluation_settings& settings) noexcept {
-  EvaluationSettings result;
+RequestSettings toRequestSettings(const lce_evaluation_settings& settings) noexcept {
+  RequestSettings result;
 
   result.asked.destination.latitudeDegrees = settings.destination_latitude;
   result.asked.destination.longitudeDegrees = settings.destination_longitude;
@@ -320,66 +320,66 @@ uint32_t toLimitBits(const ScoreResult& score) noexcept {
   return bits;
 }
 
-void fillReport(const Assessment& assessment, lce_report& report) noexcept {
+void fillReport(const Report& engineReport, lce_report& report) noexcept {
   report = lce_report{};  // every field starts at zero
 
-  report.request_id = assessment.requestId;
-  report.session_id = assessment.sessionId;
-  report.status = static_cast<int32_t>(assessment.status);
-  report.source = static_cast<int32_t>(assessment.source);
+  report.request_id = engineReport.requestId;
+  report.session_id = engineReport.sessionId;
+  report.status = static_cast<int32_t>(engineReport.status);
+  report.source = static_cast<int32_t>(engineReport.source);
 
-  report.has_position = yesOrNo(assessment.hasPosition);
-  if (assessment.hasPosition) {
-    report.latitude = assessment.position.latitudeDegrees;
-    report.longitude = assessment.position.longitudeDegrees;
-    report.distance_to_destination_meters = assessment.distanceToDestinationMeters;
-    report.gps_error_meters = assessment.gpsErrorMeters;
-    report.how_far_phone_could_be_meters = assessment.howFarPhoneCouldBeMeters;
-    report.reading_age_ms = assessment.readingAgeMs;
-    report.mock_signal = static_cast<int32_t>(assessment.mockSignal);
+  report.has_position = yesOrNo(engineReport.hasPosition);
+  if (engineReport.hasPosition) {
+    report.latitude = engineReport.position.latitudeDegrees;
+    report.longitude = engineReport.position.longitudeDegrees;
+    report.distance_to_destination_meters = engineReport.distanceToDestinationMeters;
+    report.gps_error_meters = engineReport.gpsErrorMeters;
+    report.how_far_phone_could_be_meters = engineReport.howFarPhoneCouldBeMeters;
+    report.reading_age_ms = engineReport.readingAgeMs;
+    report.mock_signal = static_cast<int32_t>(engineReport.mockSignal);
   }
 
-  report.radius_meters = assessment.radiusMeters;
-  report.age_reliability = static_cast<int32_t>(assessment.ageReliability);
-  report.permission_precision = static_cast<int32_t>(assessment.permissionPrecision);
-  report.relation = static_cast<int32_t>(assessment.relation);
+  report.radius_meters = engineReport.radiusMeters;
+  report.age_reliability = static_cast<int32_t>(engineReport.ageReliability);
+  report.permission_precision = static_cast<int32_t>(engineReport.permissionPrecision);
+  report.relation = static_cast<int32_t>(engineReport.relation);
 
-  report.quality_score = assessment.score.qualityScore;
-  report.has_score_breakdown = yesOrNo(assessment.score.hasBreakdown);
-  if (assessment.score.hasBreakdown) {
-    report.accuracy_factor = assessment.score.accuracyFactor;
-    report.freshness_factor = assessment.score.freshnessFactor;
-    report.movement_factor = assessment.score.movementFactor;
-    report.consistency_factor = assessment.score.consistencyFactor;
-    report.raw_score = assessment.score.rawScore;
+  report.quality_score = engineReport.score.qualityScore;
+  report.has_score_breakdown = yesOrNo(engineReport.score.hasBreakdown);
+  if (engineReport.score.hasBreakdown) {
+    report.accuracy_factor = engineReport.score.accuracyFactor;
+    report.freshness_factor = engineReport.score.freshnessFactor;
+    report.movement_factor = engineReport.score.movementFactor;
+    report.consistency_factor = engineReport.score.consistencyFactor;
+    report.raw_score = engineReport.score.rawScore;
   }
-  report.limits_applied = toLimitBits(assessment.score);
+  report.limits_applied = toLimitBits(engineReport.score);
 
-  report.activity_now = static_cast<int32_t>(assessment.phoneActivity.activityNow);
-  report.activity_confidence_now = static_cast<int32_t>(assessment.phoneActivity.confidenceNow);
+  report.activity_now = static_cast<int32_t>(engineReport.phoneActivity.activityNow);
+  report.activity_confidence_now = static_cast<int32_t>(engineReport.phoneActivity.confidenceNow);
   report.standing_still_since_the_reading =
-      yesOrNo(assessment.phoneActivity.standingStillSinceTheReading);
-  report.activity_known_until_now = yesOrNo(assessment.phoneActivity.knownUntilNow);
-  report.activity_known_since_age_ms = assessment.phoneActivity.knownSinceAgeMs;
-  report.activity_has_gaps = yesOrNo(assessment.phoneActivity.hasGaps);
+      yesOrNo(engineReport.phoneActivity.standingStillSinceTheReading);
+  report.activity_known_until_now = yesOrNo(engineReport.phoneActivity.knownUntilNow);
+  report.activity_known_since_age_ms = engineReport.phoneActivity.knownSinceAgeMs;
+  report.activity_has_gaps = yesOrNo(engineReport.phoneActivity.hasGaps);
 
-  report.reasons = toReasonBits(assessment.reasons);
+  report.reasons = toReasonBits(engineReport.reasons);
 
-  for (std::size_t position = 0; position < assessment.howManySteps; ++position) {
-    report.steps[position] = static_cast<int32_t>(assessment.steps[position]);
+  for (std::size_t position = 0; position < engineReport.howManySteps; ++position) {
+    report.steps[position] = static_cast<int32_t>(engineReport.steps[position]);
   }
-  report.how_many_steps = static_cast<int32_t>(assessment.howManySteps);
+  report.how_many_steps = static_cast<int32_t>(engineReport.howManySteps);
 
-  report.first_attempt_timed_out = yesOrNo(assessment.firstAttemptTimedOut);
-  report.extra_time_was_used = yesOrNo(assessment.extraTimeWasUsed);
+  report.first_attempt_timed_out = yesOrNo(engineReport.firstAttemptTimedOut);
+  report.extra_time_was_used = yesOrNo(engineReport.extraTimeWasUsed);
   report.fallback_cause =
-      assessment.hasFallbackCause ? static_cast<int32_t>(assessment.fallbackCause) : -1;
+      engineReport.hasFallbackCause ? static_cast<int32_t>(engineReport.fallbackCause) : -1;
 
-  report.readings_received = assessment.readingsReceived;
-  report.readings_kept = assessment.readingsKept;
-  report.readings_examined = assessment.readingsExamined;
-  report.gps_jumps_found = assessment.gpsJumpsFound;
-  report.duration_ms = assessment.durationMs;
+  report.readings_received = engineReport.readingsReceived;
+  report.readings_kept = engineReport.readingsKept;
+  report.readings_examined = engineReport.readingsExamined;
+  report.gps_jumps_found = engineReport.gpsJumpsFound;
+  report.duration_ms = engineReport.durationMs;
 }
 
 // The engine takes the readings as one list. This is how many the facade
@@ -455,7 +455,7 @@ extern "C" int32_t lce_close_session(lce_engine* engine, uint32_t session_id, in
   return LCE_OK;
 }
 
-// --- Evaluations -------------------------------------------------------------
+// --- Requests -------------------------------------------------------------
 
 extern "C" int32_t lce_start_evaluation(lce_engine* engine,
                                         uint32_t session_id,
@@ -466,13 +466,13 @@ extern "C" int32_t lce_start_evaluation(lce_engine* engine,
     return LCE_ERROR_NULL_ARGUMENT;
   }
 
-  const lce::EvaluationStarted started =
-      engine->engine.startEvaluation(session_id, toEvaluationSettings(*settings), now_ms);
+  const lce::RequestStarted started =
+      engine->engine.startRequest(session_id, toRequestSettings(*settings), now_ms);
 
   int32_t answer = LCE_OK;
-  if (started.result == lce::EvaluationStarted::Result::InvalidRequest) {
+  if (started.result == lce::RequestStarted::Result::InvalidRequest) {
     answer = LCE_ERROR_INVALID_REQUEST;
-  } else if (started.result == lce::EvaluationStarted::Result::TooManyReportsWaiting) {
+  } else if (started.result == lce::RequestStarted::Result::TooManyReportsWaiting) {
     answer = LCE_ERROR_TOO_MANY_REPORTS_WAITING;
   }
 
@@ -486,7 +486,7 @@ extern "C" int32_t lce_cancel_evaluation(lce_engine* engine,
   if (engine == nullptr) {
     return LCE_ERROR_NULL_ARGUMENT;
   }
-  engine->engine.cancelEvaluation(request_id, now_ms);
+  engine->engine.cancelRequest(request_id, now_ms);
   return LCE_OK;
 }
 
@@ -607,10 +607,10 @@ extern "C" int32_t lce_take_finished_report(lce_engine* engine, lce_report* repo
     return 0;
   }
 
-  lce::Assessment assessment;
-  const bool oneWasWaiting = engine->engine.takeFinishedReport(assessment);
+  lce::Report engineReport;
+  const bool oneWasWaiting = engine->engine.takeFinishedReport(engineReport);
   if (oneWasWaiting) {
-    fillReport(assessment, *report);
+    fillReport(engineReport, *report);
   }
   return yesOrNo(oneWasWaiting);
 }
@@ -638,11 +638,11 @@ extern "C" const char* lce_score_limit_name(int32_t limit) {
 }
 
 extern "C" uint32_t lce_step_count(void) {
-  return static_cast<uint32_t>(lce::EVALUATION_STEP_COUNT);
+  return static_cast<uint32_t>(lce::REQUEST_STEP_COUNT);
 }
 
 extern "C" const char* lce_step_name(int32_t step) {
   const bool isInTheList =
-      (step >= 0 && static_cast<std::size_t>(step) < lce::EVALUATION_STEP_COUNT);
-  return isInTheList ? lce::evaluationStepName(static_cast<lce::EvaluationStep>(step)) : nullptr;
+      (step >= 0 && static_cast<std::size_t>(step) < lce::REQUEST_STEP_COUNT);
+  return isInTheList ? lce::requestStepName(static_cast<lce::RequestStep>(step)) : nullptr;
 }

@@ -69,7 +69,7 @@ struct RulesForChoosingReading {
   bool usePhoneActivity = true;
 
   // Readings whose arrival number is smaller than this are not used.
-  // 0 means "any reading can be used". An evaluation request sets it when
+  // 0 means "any reading can be used". A request sets it when
   // the app does not want an answer taken from old readings of the history.
   std::uint64_t firstArrivalNumberAllowed = 0;
 };

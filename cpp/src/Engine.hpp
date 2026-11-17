@@ -2,19 +2,19 @@
 //
 //   platform code (Kotlin on Android, Swift on iOS)
 //        |
-//        |  "open a session"        "start an evaluation"     "cancel it"
+//        |  "open a session"        "start a request"         "cancel it"
 //        |  "readings arrived"      "the phone activity changed"
 //        |  "time passed"           "the app went to the background"  ...
 //        v
 //      Engine
 //        |-- sessions              each one remembers its own GPS readings
-//        |-- evaluations           the ones that are running (EvaluationRequest.cpp)
+//        |-- requests              the ones that are running (ProximityRequest.cpp)
 //        `-- phone activity        one timeline for the whole phone
 //
 // The engine never touches the GPS, a timer or the clock. After EVERY call,
 // the platform code asks it two things and obeys:
 //
-//   takeFinishedReport()        "did any evaluation finish?"
+//   takeFinishedReport()        "did any request finish?"
 //                               -> hand each report to the app
 //
 //   whatThePlatformMustDoNow()  "should the GPS be on? how often?"
@@ -41,8 +41,8 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "Assessment.hpp"
-#include "EvaluationRequest.hpp"
+#include "Report.hpp"
+#include "ProximityRequest.hpp"
 #include "LocationHistory.hpp"
 #include "PhoneActivityTimeline.hpp"
 #include "ReadingChecker.hpp"
@@ -53,23 +53,23 @@ namespace lce {
 // --- Limits ----------------------------------------------------------------------
 
 inline constexpr std::size_t MAX_OPEN_SESSIONS = 8;
-inline constexpr std::size_t MAX_RUNNING_EVALUATIONS = 16;
-inline constexpr std::size_t MAX_RUNNING_EVALUATIONS_PER_SESSION = 4;
+inline constexpr std::size_t MAX_RUNNING_REQUESTS = 16;
+inline constexpr std::size_t MAX_RUNNING_REQUESTS_PER_SESSION = 4;
 
-// Reports of finished evaluations wait here until the platform takes them.
-inline constexpr std::size_t MAX_REPORTS_WAITING = MAX_RUNNING_EVALUATIONS + 4;
+// Reports of finished requests wait here until the platform takes them.
+inline constexpr std::size_t MAX_REPORTS_WAITING = MAX_RUNNING_REQUESTS + 4;
 
-// While an evaluation is running, the GPS is asked for a reading every second.
-inline constexpr std::int64_t TIME_BETWEEN_READINGS_DURING_EVALUATION_MS = 1000;
+// While a request is running, the GPS is asked for a reading every second.
+inline constexpr std::int64_t TIME_BETWEEN_READINGS_DURING_REQUEST_MS = 1000;
 
 // --- Sessions --------------------------------------------------------------------
 
 // What the app chose when it opened a session.
 struct SessionSettings {
   // False (the usual case): the session only remembers the readings obtained
-  // by its evaluations. Opening it does not turn the GPS on.
+  // by its requests. Opening it does not turn the GPS on.
   // True: the session keeps collecting readings while it is open, so that an
-  // evaluation finds a history already there.
+  // request finds a history already there.
   bool keepCollectingReadings = false;
 
   // Only used when collecting: one reading is kept every this many
@@ -98,12 +98,12 @@ struct SessionOpened {
   ReasonSet reasons;
 };
 
-// --- Evaluations -----------------------------------------------------------------
+// --- Requests -----------------------------------------------------------------
 
-// The answer to "start an evaluation".
-struct EvaluationStarted {
+// The answer to "start a request".
+struct RequestStarted {
   enum class Result : std::uint8_t {
-    // The evaluation exists. Its report will come out of
+    // The request exists. Its report will come out of
     // takeFinishedReport(), maybe right away.
     Accepted,
     // The address or the radius makes no sense. Nothing was started. This is
@@ -122,7 +122,7 @@ struct EvaluationStarted {
 struct PlatformWork {
   // Should the GPS be delivering readings right now, and how often?
   bool locationUpdatesAreWanted = false;
-  std::int64_t timeBetweenLocationUpdatesMs = TIME_BETWEEN_READINGS_DURING_EVALUATION_MS;
+  std::int64_t timeBetweenLocationUpdatesMs = TIME_BETWEEN_READINGS_DURING_REQUEST_MS;
 
   // Should the phone be reporting its activity right now?
   bool phoneActivityUpdatesAreWanted = false;
@@ -144,20 +144,20 @@ class Engine {
   // Returns false when there is no such session.
   bool clearSessionHistory(std::uint32_t sessionId) noexcept;
 
-  // Closes a session: its evaluations are stopped and its readings are
+  // Closes a session: its requests are stopped and its readings are
   // forgotten. Closing a session that does not exist does nothing.
   void closeSession(std::uint32_t sessionId, std::int64_t nowMs) noexcept;
 
-  // --- Evaluations ---
-  // `sessionId` 0 means "no session": the evaluation works alone and
+  // --- Requests ---
+  // `sessionId` 0 means "no session": the request works alone and
   // remembers nothing after it ends.
-  EvaluationStarted startEvaluation(std::uint32_t sessionId,
-                                    const EvaluationSettings& settings,
+  RequestStarted startRequest(std::uint32_t sessionId,
+                                    const RequestSettings& settings,
                                     std::int64_t nowMs) noexcept;
 
-  // Cancelling an evaluation that already ended, or that never existed, does
+  // Cancelling a request that already ended, or that never existed, does
   // nothing.
-  void cancelEvaluation(std::uint32_t requestId, std::int64_t nowMs) noexcept;
+  void cancelRequest(std::uint32_t requestId, std::int64_t nowMs) noexcept;
 
   // --- Things that happen ---
   void whenReadingsArrive(const UncheckedReading* readings,
@@ -190,11 +190,11 @@ class Engine {
 
   // Gives one finished report and returns true, or returns false when none
   // is waiting. Call it again and again until it returns false.
-  bool takeFinishedReport(Assessment& report) noexcept;
+  bool takeFinishedReport(Report& report) noexcept;
 
   // --- For tests and diagnostics ---
   std::size_t howManySessionsAreOpen() const noexcept;
-  std::size_t howManyEvaluationsAreRunning() const noexcept;
+  std::size_t howManyRequestsAreRunning() const noexcept;
   std::size_t howManyReportsAreWaiting() const noexcept { return howManyReportsWaiting_; }
   // How many readings a session remembers (0 when there is no such session).
   std::size_t howManyReadingsSessionRemembers(std::uint32_t sessionId) const noexcept;
@@ -218,26 +218,26 @@ class Engine {
     bool collectingTimeIsOver = false;
   };
 
-  struct RunningEvaluation {
-    bool isRunning = false;
-    EvaluationRequest request;
+  struct RequestSlot {
+    bool isInUse = false;
+    ProximityRequest request;
 
     // The session it belongs to, as a position in `sessions_`.
     bool hasSession = false;
     std::size_t sessionPosition = 0;
 
-    // Readings of an evaluation that has no session. Wiped when it ends.
+    // Readings of a request that has no session. Wiped when it ends.
     LocationHistory ownHistory;
   };
 
   // Finding things. Each returns the size of its list when nothing is found.
   std::size_t findSession(std::uint32_t sessionId) const noexcept;
   std::size_t findFreeSessionSlot() const noexcept;
-  std::size_t findFreeEvaluationSlot() const noexcept;
-  std::size_t countEvaluationsOfSession(std::size_t sessionPosition) const noexcept;
+  std::size_t findFreeRequestSlot() const noexcept;
+  std::size_t countRequestsOfSession(std::size_t sessionPosition) const noexcept;
 
-  // The readings an evaluation looks at: of its session, or its own.
-  const LocationHistory& historyOf(const RunningEvaluation& evaluation) const noexcept;
+  // The readings a request looks at: of its session, or its own.
+  const LocationHistory& historyOf(const RequestSlot& slot) const noexcept;
 
   // Everything the phone reported about its activity, with the activity that
   // is still going on counted until `nowMs`.
@@ -252,21 +252,21 @@ class Engine {
                        std::int64_t nowMs,
                        NotesAboutNewReadings& notes) noexcept;
 
-  void stopEveryEvaluation(WhyTheEvaluationStopped why, std::int64_t nowMs) noexcept;
+  void stopEveryRequest(WhyTheRequestStopped why, std::int64_t nowMs) noexcept;
   void stopCollectingInEverySession() noexcept;
 
-  void putReportInTheWaitingList(const Assessment& report) noexcept;
-  void putReportWithNoEvaluationInTheWaitingList(std::uint32_t requestId,
+  void putReportInTheWaitingList(const Report& report) noexcept;
+  void putReportWithNoRequestInTheWaitingList(std::uint32_t requestId,
                                                  std::uint32_t sessionId,
-                                                 const EvaluationSettings& settings,
+                                                 const RequestSettings& settings,
                                                  ReasonCode why) noexcept;
-  void collectFinishedEvaluations() noexcept;
+  void collectFinishedRequests() noexcept;
 
   std::array<Session, MAX_OPEN_SESSIONS> sessions_{};
-  std::array<RunningEvaluation, MAX_RUNNING_EVALUATIONS> evaluations_{};
+  std::array<RequestSlot, MAX_RUNNING_REQUESTS> requestSlots_{};
 
   // Reports waiting for the platform, oldest first.
-  std::array<Assessment, MAX_REPORTS_WAITING> reportsWaiting_{};
+  std::array<Report, MAX_REPORTS_WAITING> reportsWaiting_{};
   std::size_t howManyReportsWaiting_ = 0;
 
   // Phone activity: the reports that already ended, plus the one going on.
@@ -274,7 +274,7 @@ class Engine {
   bool anActivityIsGoingOn_ = false;
   PhoneActivityReport activityGoingOn_;
 
-  // Numbers handed out to sessions and evaluations. They start at 1 and are
+  // Numbers handed out to sessions and requests. They start at 1 and are
   // never used twice, so an old number can never point at something new.
   std::uint32_t nextSessionId_ = 1;
   std::uint32_t nextRequestId_ = 1;

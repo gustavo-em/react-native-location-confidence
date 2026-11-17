@@ -38,8 +38,8 @@ DeviceState phoneWhereEverythingWorks() {
   return device;
 }
 
-EvaluationSettings usualEvaluation() {
-  EvaluationSettings settings;
+RequestSettings usualRequest() {
+  RequestSettings settings;
   settings.asked.destination = Coordinates{0.0, 0.0};
   settings.asked.radiusMeters = 100.0;
   settings.device = phoneWhereEverythingWorks();
@@ -91,11 +91,11 @@ class FakePhone {
   int timesTheGpsWasTurnedOff = 0;
 
   // Every report the engine finished, in the order it came out.
-  std::vector<Assessment> reports;
+  std::vector<Report> reports;
 
   // What the real platform code does after every call into the engine.
   void obeyTheEngine() {
-    Assessment report;
+    Report report;
     while (engine->takeFinishedReport(report)) {
       reports.push_back(report);
     }
@@ -146,16 +146,16 @@ class FakePhone {
     obeyTheEngine();
   }
 
-  std::uint32_t startEvaluation(std::uint32_t sessionId = 0,
-                                const EvaluationSettings& settings = usualEvaluation()) {
-    const EvaluationStarted started = engine->startEvaluation(sessionId, settings, nowMs);
-    REQUIRE(started.result == EvaluationStarted::Result::Accepted);
+  std::uint32_t startRequest(std::uint32_t sessionId = 0,
+                                const RequestSettings& settings = usualRequest()) {
+    const RequestStarted started = engine->startRequest(sessionId, settings, nowMs);
+    REQUIRE(started.result == RequestStarted::Result::Accepted);
     obeyTheEngine();
     return started.requestId;
   }
 
-  void cancelEvaluation(std::uint32_t requestId) {
-    engine->cancelEvaluation(requestId, nowMs);
+  void cancelRequest(std::uint32_t requestId) {
+    engine->cancelRequest(requestId, nowMs);
     obeyTheEngine();
   }
 
@@ -207,13 +207,13 @@ class FakePhone {
   }
 
   // --- Looking at the reports ---
-  const Assessment& lastReport() const {
+  const Report& lastReport() const {
     REQUIRE_FALSE(reports.empty());
     return reports.back();
   }
 
-  const Assessment& reportOf(std::uint32_t requestId) const {
-    for (const Assessment& report : reports) {
+  const Report& reportOf(std::uint32_t requestId) const {
+    for (const Report& report : reports) {
       if (report.requestId == requestId) {
         return report;
       }
@@ -224,7 +224,7 @@ class FakePhone {
 
   int howManyReportsOf(std::uint32_t requestId) const {
     int howMany = 0;
-    for (const Assessment& report : reports) {
+    for (const Report& report : reports) {
       if (report.requestId == requestId) {
         howMany += 1;
       }
@@ -232,14 +232,14 @@ class FakePhone {
     return howMany;
   }
 
-  // Nothing is left running: no evaluation, no GPS, no timer.
+  // Nothing is left running: no request, no GPS, no timer.
   bool everythingIsQuiet() const {
     return !gpsIsOn && !timerIsSet && !activityUpdatesAreOn &&
-           engine->howManyEvaluationsAreRunning() == 0 && engine->howManyReportsAreWaiting() == 0;
+           engine->howManyRequestsAreRunning() == 0 && engine->howManyReportsAreWaiting() == 0;
   }
 };
 
-bool hasReason(const Assessment& report, ReasonCode reason) {
+bool hasReason(const Report& report, ReasonCode reason) {
   return report.reasons.contains(reason);
 }
 
@@ -247,27 +247,27 @@ bool hasReason(const Assessment& report, ReasonCode reason) {
 
 // --- The examples at the top of Engine.cpp ---------------------------------------
 
-TEST_CASE("one evaluation with no session: the GPS goes on, a reading comes, it goes off") {
+TEST_CASE("one request with no session: the GPS goes on, a reading comes, it goes off") {
   FakePhone phone;
   CHECK(phone.everythingIsQuiet());
 
-  const std::uint32_t request = phone.startEvaluation();
+  const std::uint32_t request = phone.startRequest();
 
   CHECK(phone.gpsIsOn);
   CHECK(phone.gpsTimeBetweenReadingsMs == 1000);
   CHECK(phone.timerIsSet);
   CHECK(phone.timerFiresAtMs == 4500);
   CHECK(phone.reports.empty());
-  CHECK(phone.engine->howManyEvaluationsAreRunning() == 1);
+  CHECK(phone.engine->howManyRequestsAreRunning() == 1);
 
   phone.goTo(1.2);
   CHECK(phone.gpsHasAReading(20));
 
   REQUIRE(phone.reports.size() == 1);
-  const Assessment& report = phone.lastReport();
+  const Report& report = phone.lastReport();
   CHECK(report.requestId == request);
   CHECK(report.sessionId == 0);
-  CHECK(report.status == AssessmentStatus::Available);
+  CHECK(report.status == ReportStatus::Available);
   CHECK(report.source == FixSource::Fresh);
   CHECK(report.relation == EvidenceRelation::SupportsInside);
   CHECK(report.durationMs == 1200);
@@ -280,21 +280,21 @@ TEST_CASE("one evaluation with no session: the GPS goes on, a reading comes, it 
   CHECK(phone.timesTheGpsWasTurnedOff == 1);
 }
 
-TEST_CASE("CON-013 two evaluations share the GPS; cancelling one keeps it on") {
+TEST_CASE("CON-013 two requests share the GPS; cancelling one keeps it on") {
   FakePhone phone;
   const std::uint32_t session = phone.openSession().sessionId;
 
-  const std::uint32_t first = phone.startEvaluation(session);
+  const std::uint32_t first = phone.startRequest(session);
   phone.goTo(1);
-  const std::uint32_t second = phone.startEvaluation(session);
+  const std::uint32_t second = phone.startRequest(session);
   CHECK(phone.timesTheGpsWasTurnedOn == 1);  // it was already on
   CHECK(phone.timerFiresAtMs == 4500);       // the earlier of the two wake ups
 
   phone.goTo(2);
-  phone.cancelEvaluation(first);
+  phone.cancelRequest(first);
 
   REQUIRE(phone.reports.size() == 1);
-  CHECK(phone.reportOf(first).status == AssessmentStatus::Cancelled);
+  CHECK(phone.reportOf(first).status == ReportStatus::Cancelled);
   CHECK(phone.gpsIsOn);  // the second one still needs it
   CHECK(phone.timesTheGpsWasTurnedOff == 0);
 
@@ -302,7 +302,7 @@ TEST_CASE("CON-013 two evaluations share the GPS; cancelling one keeps it on") {
   phone.gpsHasAReading(20);
 
   REQUIRE(phone.reports.size() == 2);
-  CHECK(phone.reportOf(second).status == AssessmentStatus::Available);
+  CHECK(phone.reportOf(second).status == ReportStatus::Available);
   CHECK(phone.everythingIsQuiet());
   CHECK(phone.timesTheGpsWasTurnedOff == 1);
 }
@@ -326,17 +326,17 @@ TEST_CASE("SES-002 SES-004 a session that keeps collecting has a history ready")
   phone.gpsHasAReading(20);
   CHECK(phone.engine->howManyReadingsSessionRemembers(opened.sessionId) == 3);
 
-  // An evaluation starts and the GPS gives nothing new.
+  // A request starts and the GPS gives nothing new.
   phone.goTo(12);
-  const std::uint32_t request = phone.startEvaluation(opened.sessionId);
-  CHECK(phone.gpsTimeBetweenReadingsMs == 1000);  // faster while an evaluation waits
+  const std::uint32_t request = phone.startRequest(opened.sessionId);
+  CHECK(phone.gpsTimeBetweenReadingsMs == 1000);  // faster while a request waits
 
   phone.goTo(40);
 
   REQUIRE(phone.howManyReportsOf(request) == 1);
-  const Assessment& report = phone.reportOf(request);
+  const Report& report = phone.reportOf(request);
   CHECK(report.source == FixSource::Cached);  // the answer came from the history
-  CHECK(report.status == AssessmentStatus::Degraded);
+  CHECK(report.status == ReportStatus::Degraded);
   CHECK(report.hasPosition);
   CHECK(report.readingsExamined == 3);
   CHECK(report.readingsReceived == 0);
@@ -363,25 +363,25 @@ TEST_CASE("SES-001 HIS-001 a usual session does not turn anything on") {
   CHECK(phone.timesTheGpsWasTurnedOn == 0);
 }
 
-TEST_CASE("SES-005 a usual session only remembers the readings of its evaluations") {
+TEST_CASE("SES-005 a usual session only remembers the readings of its requests") {
   FakePhone phone;
   const std::uint32_t session = phone.openSession().sessionId;
 
-  // No evaluation is running: the GPS is off and nothing can arrive.
+  // No request is running: the GPS is off and nothing can arrive.
   CHECK_FALSE(phone.gpsHasAReading(20));
   CHECK(phone.engine->howManyReadingsSessionRemembers(session) == 0);
 
-  // An evaluation obtains one reading; the session remembers it.
-  const std::uint32_t first = phone.startEvaluation(session);
+  // A request obtains one reading; the session remembers it.
+  const std::uint32_t first = phone.startRequest(session);
   phone.goTo(1);
   phone.gpsHasAReading(20);
   CHECK(phone.engine->howManyReadingsSessionRemembers(session) == 1);
   CHECK(phone.reportOf(first).readingsReceived == 1);
   CHECK(phone.reportOf(first).readingsKept == 1);
 
-  // The next evaluation finds it there. The GPS says nothing this time.
+  // The next request finds it there. The GPS says nothing this time.
   phone.goTo(5);
-  const std::uint32_t second = phone.startEvaluation(session);
+  const std::uint32_t second = phone.startRequest(session);
   phone.goTo(30);
   CHECK(phone.reportOf(second).source == FixSource::Cached);
   CHECK(phone.reportOf(second).readingsExamined == 1);
@@ -447,7 +447,7 @@ TEST_CASE("SES-007 collecting stops by itself when its time is over") {
   // The session is still open, and its reports say why it stopped collecting.
   CHECK(phone.engine->howManySessionsAreOpen() == 1);
   phone.goTo(70);
-  const std::uint32_t request = phone.startEvaluation(session);
+  const std::uint32_t request = phone.startRequest(session);
   phone.goTo(71);
   phone.gpsHasAReading(20);
   CHECK(hasReason(phone.reportOf(request), ReasonCode::MonitoringDurationReached));
@@ -457,8 +457,8 @@ TEST_CASE("SES-006 CON-010 CON-011 the background stops everything and nothing c
   FakePhone phone;
   const std::uint32_t session = phone.openSession(sessionThatKeepsCollecting()).sessionId;
   phone.gpsHasAReading(20);
-  const std::uint32_t request = phone.startEvaluation(session, [] {
-    EvaluationSettings settings = usualEvaluation();
+  const std::uint32_t request = phone.startRequest(session, [] {
+    RequestSettings settings = usualRequest();
     settings.asked.worstGpsErrorAcceptedMeters = 1.0;  // nothing will be good enough
     return settings;
   }());
@@ -467,7 +467,7 @@ TEST_CASE("SES-006 CON-010 CON-011 the background stops everything and nothing c
   phone.goTo(2);
   phone.appGoesToBackground();
 
-  CHECK(phone.reportOf(request).status == AssessmentStatus::Cancelled);
+  CHECK(phone.reportOf(request).status == ReportStatus::Cancelled);
   CHECK(hasReason(phone.reportOf(request), ReasonCode::AppBackgrounded));
   CHECK_FALSE(phone.reportOf(request).hasPosition);
   CHECK(phone.engine->collectingStateOfSession(session) == CollectingState::Stopped);
@@ -479,10 +479,10 @@ TEST_CASE("SES-006 CON-010 CON-011 the background stops everything and nothing c
   CHECK(phone.timesTheGpsWasTurnedOn == 1);
 
   // The app has to ask again. The session and its history are still there.
-  const std::uint32_t again = phone.startEvaluation(session);
+  const std::uint32_t again = phone.startRequest(session);
   CHECK(phone.gpsIsOn);
   phone.gpsHasAReading(20);
-  CHECK(phone.reportOf(again).status == AssessmentStatus::Available);
+  CHECK(phone.reportOf(again).status == ReportStatus::Available);
   CHECK_FALSE(hasReason(phone.reportOf(again), ReasonCode::AppBackgrounded));
   // The collecting did not come back.
   CHECK(phone.engine->collectingStateOfSession(session) == CollectingState::Stopped);
@@ -507,27 +507,27 @@ TEST_CASE("SES-008 HIS-011 HIS-013 PUB-005 closing a session forgets it; twice i
   CHECK(phone.reports.empty());
 }
 
-TEST_CASE("CON-007 closing a session stops its evaluations, and only its own") {
+TEST_CASE("CON-007 closing a session stops its requests, and only its own") {
   FakePhone phone;
   const std::uint32_t sessionA = phone.openSession().sessionId;
   const std::uint32_t sessionB = phone.openSession().sessionId;
-  const std::uint32_t ofA = phone.startEvaluation(sessionA);
-  const std::uint32_t ofB = phone.startEvaluation(sessionB);
-  const std::uint32_t withNoSession = phone.startEvaluation();
+  const std::uint32_t ofA = phone.startRequest(sessionA);
+  const std::uint32_t ofB = phone.startRequest(sessionB);
+  const std::uint32_t withNoSession = phone.startRequest();
 
   phone.goTo(1);
   phone.closeSession(sessionA);
 
   REQUIRE(phone.reports.size() == 1);
-  CHECK(phone.reportOf(ofA).status == AssessmentStatus::Cancelled);
+  CHECK(phone.reportOf(ofA).status == ReportStatus::Cancelled);
   CHECK(hasReason(phone.reportOf(ofA), ReasonCode::SessionStopped));
   CHECK(phone.gpsIsOn);
-  CHECK(phone.engine->howManyEvaluationsAreRunning() == 2);
+  CHECK(phone.engine->howManyRequestsAreRunning() == 2);
 
   phone.goTo(2);
   phone.gpsHasAReading(20);
-  CHECK(phone.reportOf(ofB).status == AssessmentStatus::Available);
-  CHECK(phone.reportOf(withNoSession).status == AssessmentStatus::Available);
+  CHECK(phone.reportOf(ofB).status == ReportStatus::Available);
+  CHECK(phone.reportOf(withNoSession).status == ReportStatus::Available);
   CHECK(phone.everythingIsQuiet());
 }
 
@@ -536,19 +536,19 @@ TEST_CASE("HIS-010 SES-012 two sessions never see each other's readings") {
   const std::uint32_t sessionA = phone.openSession().sessionId;
   const std::uint32_t sessionB = phone.openSession().sessionId;
 
-  // Only A has an evaluation running when the reading arrives.
-  phone.startEvaluation(sessionA);
+  // Only A has a request running when the reading arrives.
+  phone.startRequest(sessionA);
   phone.goTo(1);
   phone.gpsHasAReading(20);
 
   CHECK(phone.engine->howManyReadingsSessionRemembers(sessionA) == 1);
   CHECK(phone.engine->howManyReadingsSessionRemembers(sessionB) == 0);
 
-  // An evaluation in B that gets nothing new has nothing to fall back on.
+  // A request in B that gets nothing new has nothing to fall back on.
   phone.goTo(2);
-  const std::uint32_t ofB = phone.startEvaluation(sessionB);
+  const std::uint32_t ofB = phone.startRequest(sessionB);
   phone.goTo(20);
-  CHECK(phone.reportOf(ofB).status == AssessmentStatus::Unavailable);
+  CHECK(phone.reportOf(ofB).status == ReportStatus::Unavailable);
   CHECK(phone.reportOf(ofB).readingsExamined == 0);
 }
 
@@ -593,9 +593,9 @@ TEST_CASE("HIS-014 HIS-016 a new session starts empty and old numbers point at n
   CHECK(phone.engine->howManyReadingsSessionRemembers(newSession) == 0);
 
   // Using the old number gives a report that says so, and starts nothing.
-  const std::uint32_t request = phone.startEvaluation(oldSession);
+  const std::uint32_t request = phone.startRequest(oldSession);
   REQUIRE(phone.howManyReportsOf(request) == 1);
-  CHECK(phone.reportOf(request).status == AssessmentStatus::Unavailable);
+  CHECK(phone.reportOf(request).status == ReportStatus::Unavailable);
   CHECK(phone.reportOf(request).sessionId == oldSession);
   CHECK(phone.reportOf(request).howManySteps == 2);
   CHECK(phone.reportOf(request).radiusMeters == 100.0);
@@ -630,8 +630,8 @@ TEST_CASE("SES-009 CON-021 losing the permission stops everything and forgets th
   const std::uint32_t session = phone.openSession(sessionThatKeepsCollecting()).sessionId;
   phone.gpsHasAReading(20);
   phone.goTo(1);
-  const std::uint32_t request = phone.startEvaluation(session, [] {
-    EvaluationSettings settings = usualEvaluation();
+  const std::uint32_t request = phone.startRequest(session, [] {
+    RequestSettings settings = usualRequest();
     settings.asked.worstGpsErrorAcceptedMeters = 1.0;
     return settings;
   }());
@@ -639,7 +639,7 @@ TEST_CASE("SES-009 CON-021 losing the permission stops everything and forgets th
   phone.goTo(3);
   phone.locationPermissionIsLost();
 
-  CHECK(phone.reportOf(request).status == AssessmentStatus::Unavailable);
+  CHECK(phone.reportOf(request).status == ReportStatus::Unavailable);
   CHECK(hasReason(phone.reportOf(request), ReasonCode::PermissionDenied));
   CHECK_FALSE(phone.reportOf(request).hasPosition);
   CHECK(phone.engine->howManyReadingsSessionRemembers(session) == 0);
@@ -647,62 +647,62 @@ TEST_CASE("SES-009 CON-021 losing the permission stops everything and forgets th
   CHECK(phone.everythingIsQuiet());
 }
 
-TEST_CASE("REC-025 a GPS failure ends the evaluations with what they remember") {
+TEST_CASE("REC-025 a GPS failure ends the requests with what they remember") {
   FakePhone phone;
   const std::uint32_t session = phone.openSession(sessionThatKeepsCollecting()).sessionId;
   phone.gpsHasAReading(20);
   phone.goTo(2);
-  const std::uint32_t request = phone.startEvaluation(session);
+  const std::uint32_t request = phone.startRequest(session);
 
   phone.goTo(3);
   phone.locationProviderFails();
 
-  const Assessment& report = phone.reportOf(request);
-  CHECK(report.status == AssessmentStatus::Degraded);
+  const Report& report = phone.reportOf(request);
+  CHECK(report.status == ReportStatus::Degraded);
   CHECK(report.source == FixSource::Cached);
   CHECK(hasReason(report, ReasonCode::NativeProviderUnavailable));
   CHECK(phone.engine->collectingStateOfSession(session) == CollectingState::Stopped);
   CHECK(phone.everythingIsQuiet());
 }
 
-// --- Evaluations -----------------------------------------------------------------------
+// --- Requests -----------------------------------------------------------------------
 
-TEST_CASE("REC-017 an evaluation with no session starts empty and leaves nothing behind") {
+TEST_CASE("REC-017 a request with no session starts empty and leaves nothing behind") {
   FakePhone phone;
 
-  const std::uint32_t first = phone.startEvaluation();
+  const std::uint32_t first = phone.startRequest();
   phone.goTo(1);
   phone.gpsHasAReading(20);
-  REQUIRE(phone.reportOf(first).status == AssessmentStatus::Available);
+  REQUIRE(phone.reportOf(first).status == ReportStatus::Available);
 
   // The next one does not find that reading.
   phone.goTo(2);
-  const std::uint32_t second = phone.startEvaluation();
+  const std::uint32_t second = phone.startRequest();
   phone.goTo(20);
 
-  CHECK(phone.reportOf(second).status == AssessmentStatus::Unavailable);
+  CHECK(phone.reportOf(second).status == ReportStatus::Unavailable);
   CHECK(phone.reportOf(second).readingsExamined == 0);
   CHECK(hasReason(phone.reportOf(second), ReasonCode::HistoryEmpty));
 }
 
-TEST_CASE("CON-012 INV-11 two evaluations with different addresses do not mix") {
+TEST_CASE("CON-012 INV-11 two requests with different addresses do not mix") {
   FakePhone phone;
   const std::uint32_t session = phone.openSession().sessionId;
 
-  EvaluationSettings nearAddress = usualEvaluation();
-  EvaluationSettings farAddress = usualEvaluation();
+  RequestSettings nearAddress = usualRequest();
+  RequestSettings farAddress = usualRequest();
   farAddress.asked.destination = Coordinates{0.0, 0.01};  // about 1.1 km east
   farAddress.asked.radiusMeters = 50.0;
 
-  const std::uint32_t nearRequest = phone.startEvaluation(session, nearAddress);
-  const std::uint32_t farRequest = phone.startEvaluation(session, farAddress);
+  const std::uint32_t nearRequest = phone.startRequest(session, nearAddress);
+  const std::uint32_t farRequest = phone.startRequest(session, farAddress);
 
   phone.goTo(1);
   phone.gpsHasAReading(20);
 
   REQUIRE(phone.reports.size() == 2);
-  const Assessment& near = phone.reportOf(nearRequest);
-  const Assessment& far = phone.reportOf(farRequest);
+  const Report& near = phone.reportOf(nearRequest);
+  const Report& far = phone.reportOf(farRequest);
 
   CHECK(near.radiusMeters == 100.0);
   CHECK(near.relation == EvidenceRelation::SupportsInside);
@@ -720,17 +720,17 @@ TEST_CASE("CON-012 INV-11 two evaluations with different addresses do not mix") 
 
 TEST_CASE("CON-005 CON-006 cancelling after the end, twice, or something that never existed") {
   FakePhone phone;
-  const std::uint32_t request = phone.startEvaluation();
+  const std::uint32_t request = phone.startRequest();
   phone.goTo(1);
   phone.gpsHasAReading(20);
   REQUIRE(phone.reports.size() == 1);
 
-  phone.cancelEvaluation(request);
-  phone.cancelEvaluation(request);
-  phone.cancelEvaluation(424242);
+  phone.cancelRequest(request);
+  phone.cancelRequest(request);
+  phone.cancelRequest(424242);
 
   CHECK(phone.reports.size() == 1);
-  CHECK(phone.lastReport().status == AssessmentStatus::Available);
+  CHECK(phone.lastReport().status == ReportStatus::Available);
   CHECK(phone.everythingIsQuiet());
 }
 
@@ -738,73 +738,73 @@ TEST_CASE("the address and the radius are checked before anything starts") {
   FakePhone phone;
 
   SUBCASE("GEO-012 a latitude that does not exist") {
-    EvaluationSettings settings = usualEvaluation();
+    RequestSettings settings = usualRequest();
     settings.asked.destination = Coordinates{90.00001, 0.0};
-    const EvaluationStarted started = phone.engine->startEvaluation(0, settings, 0);
-    CHECK(started.result == EvaluationStarted::Result::InvalidRequest);
+    const RequestStarted started = phone.engine->startRequest(0, settings, 0);
+    CHECK(started.result == RequestStarted::Result::InvalidRequest);
     CHECK(started.requestId == 0);
   }
 
   SUBCASE("GEO-013 a longitude that does not exist") {
-    EvaluationSettings settings = usualEvaluation();
+    RequestSettings settings = usualRequest();
     settings.asked.destination = Coordinates{0.0, 180.00001};
-    CHECK(phone.engine->startEvaluation(0, settings, 0).result ==
-          EvaluationStarted::Result::InvalidRequest);
+    CHECK(phone.engine->startRequest(0, settings, 0).result ==
+          RequestStarted::Result::InvalidRequest);
   }
 
   SUBCASE("GEO-016 GEO-017 GEO-019 a radius that is zero, negative or above 100 km") {
     for (const double radius : {0.0, -1.0, 100001.0}) {
-      EvaluationSettings settings = usualEvaluation();
+      RequestSettings settings = usualRequest();
       settings.asked.radiusMeters = radius;
-      CHECK(phone.engine->startEvaluation(0, settings, 0).result ==
-            EvaluationStarted::Result::InvalidRequest);
+      CHECK(phone.engine->startRequest(0, settings, 0).result ==
+            RequestStarted::Result::InvalidRequest);
     }
   }
 
   SUBCASE("GEO-018 a radius of exactly 100 km is accepted") {
-    EvaluationSettings settings = usualEvaluation();
+    RequestSettings settings = usualRequest();
     settings.asked.radiusMeters = 100000.0;
-    CHECK(phone.engine->startEvaluation(0, settings, 0).result ==
-          EvaluationStarted::Result::Accepted);
+    CHECK(phone.engine->startRequest(0, settings, 0).result ==
+          RequestStarted::Result::Accepted);
   }
 
   phone.obeyTheEngine();
   // A request that was refused turned nothing on and produced no report.
-  if (phone.engine->howManyEvaluationsAreRunning() == 0) {
+  if (phone.engine->howManyRequestsAreRunning() == 0) {
     CHECK(phone.everythingIsQuiet());
     CHECK(phone.reports.empty());
   }
 }
 
-TEST_CASE("CON-014 too many evaluations at once get a report that says 'busy'") {
+TEST_CASE("CON-014 too many requests at once get a report that says 'busy'") {
   FakePhone phone;
   const std::uint32_t session = phone.openSession().sessionId;
 
   SUBCASE("more than 4 in the same session") {
     for (int count = 0; count < 4; ++count) {
-      phone.startEvaluation(session);
+      phone.startRequest(session);
     }
-    CHECK(phone.engine->howManyEvaluationsAreRunning() == 4);
+    CHECK(phone.engine->howManyRequestsAreRunning() == 4);
 
-    const std::uint32_t oneTooMany = phone.startEvaluation(session);
+    const std::uint32_t oneTooMany = phone.startRequest(session);
 
     REQUIRE(phone.howManyReportsOf(oneTooMany) == 1);
-    CHECK(phone.reportOf(oneTooMany).status == AssessmentStatus::Unavailable);
+    CHECK(phone.reportOf(oneTooMany).status == ReportStatus::Unavailable);
     CHECK(hasReason(phone.reportOf(oneTooMany), ReasonCode::Busy));
-    CHECK(phone.engine->howManyEvaluationsAreRunning() == 4);
+    CHECK(phone.engine->howManyRequestsAreRunning() == 4);
 
     // Another session, or no session, still has room.
-    phone.startEvaluation();
-    CHECK(phone.engine->howManyEvaluationsAreRunning() == 5);
+    phone.startRequest();
+    CHECK(phone.engine->howManyRequestsAreRunning() == 5);
   }
 
   SUBCASE("more than 16 in total") {
     for (int count = 0; count < 16; ++count) {
-      phone.startEvaluation();
+      phone.startRequest();
     }
-    CHECK(phone.engine->howManyEvaluationsAreRunning() == 16);
+    CHECK(phone.engine->howManyRequestsAreRunning() == 16);
 
-    const std::uint32_t oneTooMany = phone.startEvaluation();
+    const std::uint32_t oneTooMany = phone.startRequest();
     CHECK(hasReason(phone.reportOf(oneTooMany), ReasonCode::Busy));
 
     // One reading ends all 16, and everything goes quiet.
@@ -832,19 +832,19 @@ TEST_CASE("more than 8 sessions are refused") {
   CHECK(accepted.sessionId == 9);
 }
 
-TEST_CASE("when the platform does not take the reports, new evaluations are refused") {
+TEST_CASE("when the platform does not take the reports, new requests are refused") {
   Engine* engine = new Engine();
-  const EvaluationSettings settings = usualEvaluation();
+  const RequestSettings settings = usualRequest();
 
   // Nobody calls takeFinishedReport(). An unknown session gives a report at
   // once, and each of them stays in the waiting list.
   std::size_t accepted = 0;
   for (int count = 0; count < 100; ++count) {
-    const EvaluationStarted started = engine->startEvaluation(77, settings, 0);
-    if (started.result == EvaluationStarted::Result::Accepted) {
+    const RequestStarted started = engine->startRequest(77, settings, 0);
+    if (started.result == RequestStarted::Result::Accepted) {
       accepted += 1;
     } else {
-      CHECK(started.result == EvaluationStarted::Result::TooManyReportsWaiting);
+      CHECK(started.result == RequestStarted::Result::TooManyReportsWaiting);
     }
   }
 
@@ -852,38 +852,38 @@ TEST_CASE("when the platform does not take the reports, new evaluations are refu
   CHECK(engine->howManyReportsAreWaiting() == MAX_REPORTS_WAITING);
 
   // Taking them makes room again, and they come out in order.
-  Assessment report;
+  Report report;
   std::uint32_t expectedRequestId = 1;
   while (engine->takeFinishedReport(report)) {
     CHECK(report.requestId == expectedRequestId);
     expectedRequestId += 1;
   }
-  CHECK(engine->startEvaluation(77, settings, 0).result == EvaluationStarted::Result::Accepted);
+  CHECK(engine->startRequest(77, settings, 0).result == RequestStarted::Result::Accepted);
 
   delete engine;
 }
 
-TEST_CASE("running evaluations always keep room for their own reports") {
+TEST_CASE("running requests always keep room for their own reports") {
   Engine* engine = new Engine();
-  const EvaluationSettings settings = usualEvaluation();
+  const RequestSettings settings = usualRequest();
 
-  // 16 evaluations run, and nobody takes any report.
+  // 16 requests run, and nobody takes any report.
   for (int count = 0; count < 16; ++count) {
-    REQUIRE(engine->startEvaluation(0, settings, 0).result ==
-            EvaluationStarted::Result::Accepted);
+    REQUIRE(engine->startRequest(0, settings, 0).result ==
+            RequestStarted::Result::Accepted);
   }
   // 4 more reports fit in the list beside the 16 that are still to come.
   for (int count = 0; count < 4; ++count) {
-    CHECK(engine->startEvaluation(77, settings, 0).result ==
-          EvaluationStarted::Result::Accepted);
+    CHECK(engine->startRequest(77, settings, 0).result ==
+          RequestStarted::Result::Accepted);
   }
-  CHECK(engine->startEvaluation(77, settings, 0).result ==
-        EvaluationStarted::Result::TooManyReportsWaiting);
+  CHECK(engine->startRequest(77, settings, 0).result ==
+        RequestStarted::Result::TooManyReportsWaiting);
 
   // Everything ends: all 20 reports are there, none was lost.
   engine->whenAppGoesToBackground(1000);
   CHECK(engine->howManyReportsAreWaiting() == 20);
-  CHECK(engine->howManyEvaluationsAreRunning() == 0);
+  CHECK(engine->howManyRequestsAreRunning() == 0);
 
   delete engine;
 }
@@ -892,9 +892,9 @@ TEST_CASE("running evaluations always keep room for their own reports") {
 
 TEST_CASE("REC-027 a delivery with good and broken readings is counted correctly") {
   FakePhone phone;
-  const std::uint32_t request = phone.startEvaluation(0, [] {
-    EvaluationSettings settings = usualEvaluation();
-    settings.asked.worstGpsErrorAcceptedMeters = 1.0;  // keep the evaluation running
+  const std::uint32_t request = phone.startRequest(0, [] {
+    RequestSettings settings = usualRequest();
+    settings.asked.worstGpsErrorAcceptedMeters = 1.0;  // keep the request running
     return settings;
   }());
 
@@ -912,7 +912,7 @@ TEST_CASE("REC-027 a delivery with good and broken readings is counted correctly
   phone.obeyTheEngine();
   phone.goTo(20);
 
-  const Assessment& report = phone.reportOf(request);
+  const Report& report = phone.reportOf(request);
   CHECK(report.readingsReceived == 4);
   CHECK(report.readingsKept == 2);
   CHECK(report.readingsExamined == 2);
@@ -923,8 +923,8 @@ TEST_CASE("REC-027 a delivery with good and broken readings is counted correctly
 
 TEST_CASE("HIS-006 VAL-014 the same reading twice, and a reading that arrives late") {
   FakePhone phone;
-  const std::uint32_t request = phone.startEvaluation(0, [] {
-    EvaluationSettings settings = usualEvaluation();
+  const std::uint32_t request = phone.startRequest(0, [] {
+    RequestSettings settings = usualRequest();
     settings.asked.worstGpsErrorAcceptedMeters = 1.0;
     return settings;
   }());
@@ -937,7 +937,7 @@ TEST_CASE("HIS-006 VAL-014 the same reading twice, and a reading that arrives la
   phone.gpsHasThisReading(older);  // taken before, delivered after
   phone.goTo(20);
 
-  const Assessment& report = phone.reportOf(request);
+  const Report& report = phone.reportOf(request);
   CHECK(report.readingsReceived == 3);
   CHECK(report.readingsKept == 2);
   CHECK(report.readingsExamined == 2);
@@ -962,12 +962,12 @@ TEST_CASE("HIS-027 ten poor readings do not push out the only good one") {
   }
   CHECK(phone.engine->howManyReadingsSessionRemembers(session) == 10);
 
-  // An evaluation that gets nothing new answers with the good reading.
+  // A request that gets nothing new answers with the good reading.
   phone.goTo(12);
-  const std::uint32_t request = phone.startEvaluation(session);
+  const std::uint32_t request = phone.startRequest(session);
   phone.goTo(40);
 
-  const Assessment& report = phone.reportOf(request);
+  const Report& report = phone.reportOf(request);
   REQUIRE(report.hasPosition);
   CHECK(report.gpsErrorMeters == 5.0);
   CHECK(report.source == FixSource::Cached);
@@ -1000,28 +1000,28 @@ TEST_CASE("HIS-005 a session forgets readings older than 2 minutes") {
 
 TEST_CASE("VAL-008 a reading slightly from the future is used, and the report says so") {
   FakePhone phone;
-  const std::uint32_t request = phone.startEvaluation();
+  const std::uint32_t request = phone.startRequest();
 
   phone.goTo(1);
   // Taken "half a second from now": two clocks of the phone disagree a little.
   phone.gpsHasThisReading(fromTheGps(1.5, 20));
 
-  const Assessment& report = phone.reportOf(request);
-  CHECK(report.status == AssessmentStatus::Available);
+  const Report& report = phone.reportOf(request);
+  CHECK(report.status == ReportStatus::Available);
   CHECK(report.readingAgeMs == 0);  // counted as taken right now
   CHECK(hasReason(report, ReasonCode::LocationFutureTimestamp));
 }
 
 TEST_CASE("VAL-007 a reading far from the future is thrown away") {
   FakePhone phone;
-  const std::uint32_t request = phone.startEvaluation();
+  const std::uint32_t request = phone.startRequest();
 
   phone.goTo(1);
   phone.gpsHasThisReading(fromTheGps(121, 20));  // two minutes ahead
   phone.goTo(20);
 
-  const Assessment& report = phone.reportOf(request);
-  CHECK(report.status == AssessmentStatus::Unavailable);
+  const Report& report = phone.reportOf(request);
+  CHECK(report.status == ReportStatus::Unavailable);
   CHECK(report.score.qualityScore == 0);
   CHECK(report.readingsReceived == 1);
   CHECK(report.readingsKept == 0);
@@ -1031,14 +1031,14 @@ TEST_CASE("VAL-007 a reading far from the future is thrown away") {
 TEST_CASE("a reading that arrives already older than 2 minutes is not kept") {
   FakePhone phone;
   phone.goTo(200);
-  const std::uint32_t request = phone.startEvaluation();
+  const std::uint32_t request = phone.startRequest();
 
   phone.goTo(201);
   phone.gpsHasThisReading(fromTheGps(10, 20));  // 191 seconds old
   phone.goTo(220);
 
-  const Assessment& report = phone.reportOf(request);
-  CHECK(report.status == AssessmentStatus::Unavailable);
+  const Report& report = phone.reportOf(request);
+  CHECK(report.status == ReportStatus::Unavailable);
   CHECK(report.readingsReceived == 1);
   CHECK(report.readingsKept == 0);
   CHECK(report.readingsExamined == 0);
@@ -1060,17 +1060,17 @@ TEST_CASE("readings the app made up are marked in every report") {
   FakePhone phone;
   phone.engine->setReadingsAreSimulated(true);
 
-  const std::uint32_t request = phone.startEvaluation();
+  const std::uint32_t request = phone.startRequest();
   phone.goTo(1);
   phone.gpsHasAReading(20);
   CHECK(hasReason(phone.reportOf(request), ReasonCode::SimulatedLocationSource));
 
   // Also in a report that used no reading at all.
-  const std::uint32_t unknown = phone.startEvaluation(555);
+  const std::uint32_t unknown = phone.startRequest(555);
   CHECK(hasReason(phone.reportOf(unknown), ReasonCode::SimulatedLocationSource));
 
   phone.engine->setReadingsAreSimulated(false);
-  const std::uint32_t real = phone.startEvaluation();
+  const std::uint32_t real = phone.startRequest();
   phone.goTo(2);
   phone.gpsHasAReading(20);
   CHECK_FALSE(hasReason(phone.reportOf(real), ReasonCode::SimulatedLocationSource));
@@ -1078,26 +1078,26 @@ TEST_CASE("readings the app made up are marked in every report") {
 
 // --- The phone activity -------------------------------------------------------------------
 
-TEST_CASE("activity updates are on only while an evaluation can use them") {
+TEST_CASE("activity updates are on only while a request can use them") {
   FakePhone phone;
   phone.openSession(sessionThatKeepsCollecting());
   CHECK_FALSE(phone.activityUpdatesAreOn);  // collecting alone does not need them
 
-  const std::uint32_t request = phone.startEvaluation();
+  const std::uint32_t request = phone.startRequest();
   CHECK(phone.activityUpdatesAreOn);
 
-  phone.cancelEvaluation(request);
+  phone.cancelRequest(request);
   CHECK_FALSE(phone.activityUpdatesAreOn);
 
   // The app does not want the activity, or the phone cannot give it.
-  EvaluationSettings withoutActivity = usualEvaluation();
+  RequestSettings withoutActivity = usualRequest();
   withoutActivity.asked.usePhoneActivity = false;
-  phone.startEvaluation(0, withoutActivity);
+  phone.startRequest(0, withoutActivity);
   CHECK_FALSE(phone.activityUpdatesAreOn);
 
-  EvaluationSettings phoneCannot = usualEvaluation();
+  RequestSettings phoneCannot = usualRequest();
   phoneCannot.device.phoneActivity = PhoneActivitySupport::PermissionNotAsked;
-  phone.startEvaluation(0, phoneCannot);
+  phone.startRequest(0, phoneCannot);
   CHECK_FALSE(phone.activityUpdatesAreOn);
 }
 
@@ -1110,12 +1110,12 @@ TEST_CASE("MOT-031 the activity that is going on counts until now") {
   phone.goTo(1);
   phone.phoneActivityChanges(PhoneActivity::StandingStill, 0);
 
-  // 30 seconds later an evaluation gets nothing new from the GPS.
+  // 30 seconds later a request gets nothing new from the GPS.
   phone.goTo(30);
-  const std::uint32_t request = phone.startEvaluation(session);
+  const std::uint32_t request = phone.startRequest(session);
   phone.goTo(40);
 
-  const Assessment& report = phone.reportOf(request);
+  const Report& report = phone.reportOf(request);
   REQUIRE(report.hasPosition);
   CHECK(report.readingAgeMs == 34500);  // it ended when the first attempt ended
   CHECK(report.phoneActivity.standingStillSinceTheReading);
@@ -1135,10 +1135,10 @@ TEST_CASE("MOT-020 a new activity ends the one before it") {
   phone.phoneActivityChanges(PhoneActivity::StandingStill, 28);
 
   phone.goTo(30);
-  const std::uint32_t request = phone.startEvaluation(session);
+  const std::uint32_t request = phone.startRequest(session);
   phone.goTo(50);
 
-  const Assessment& report = phone.reportOf(request);
+  const Report& report = phone.reportOf(request);
   REQUIRE(report.hasPosition);
   // 28 seconds in a vehicle and the rest standing still: the old reading is
   // not saved by the fact that the phone is standing still now.
@@ -1158,10 +1158,10 @@ TEST_CASE("MOT-024 MOT-025 after the updates stop, the activity is unknown again
   phone.engine->whenPhoneActivityUpdatesStop(phone.nowMs);
 
   phone.goTo(20);
-  const std::uint32_t request = phone.startEvaluation(session);
+  const std::uint32_t request = phone.startRequest(session);
   phone.goTo(40);
 
-  const Assessment& report = phone.reportOf(request);
+  const Report& report = phone.reportOf(request);
   REQUIRE(report.hasPosition);
   // Standing still for 10 seconds, then nothing known for the rest.
   CHECK_FALSE(report.phoneActivity.standingStillSinceTheReading);
@@ -1172,7 +1172,7 @@ TEST_CASE("MOT-024 MOT-025 after the updates stop, the activity is unknown again
 
 TEST_CASE("MOT-012 an activity report that arrives after the end changes nothing") {
   FakePhone phone;
-  const std::uint32_t request = phone.startEvaluation();
+  const std::uint32_t request = phone.startRequest();
   phone.goTo(1);
   phone.gpsHasAReading(20);
   REQUIRE(phone.reports.size() == 1);
@@ -1195,7 +1195,7 @@ TEST_CASE("a 'since' in the future counts from now") {
   phone.phoneActivityChanges(PhoneActivity::StandingStill, 99);
 
   phone.goTo(10);
-  const std::uint32_t request = phone.startEvaluation(session);
+  const std::uint32_t request = phone.startRequest(session);
   phone.goTo(30);
 
   CHECK(phone.reportOf(request).phoneActivity.standingStillSinceTheReading);
@@ -1212,11 +1212,11 @@ TEST_CASE("the activity before a change is remembered") {
   phone.phoneActivityChanges(PhoneActivity::StandingStill, 10);
 
   phone.goTo(20);
-  const std::uint32_t request = phone.startEvaluation(session);
+  const std::uint32_t request = phone.startRequest(session);
   phone.goTo(40);
 
-  // The evaluation ends at second 31.5: 10 s walking and 21.5 s standing still.
-  const Assessment& report = phone.reportOf(request);
+  // The request ends at second 31.5: 10 s walking and 21.5 s standing still.
+  const Report& report = phone.reportOf(request);
   REQUIRE(report.hasPosition);
   CHECK(report.readingAgeMs == 31500);
   CHECK(report.howFarPhoneCouldBeMeters == doctest::Approx(5.0 + 3.0 * 10.0 + 0.5 * 21.5));
@@ -1231,10 +1231,10 @@ TEST_CASE("MOT-022 an activity the phone is not very sure about does not shrink 
                                          PhoneActivityConfidence::Medium, 0, phone.nowMs);
 
   phone.goTo(10);
-  const std::uint32_t request = phone.startEvaluation(session);
+  const std::uint32_t request = phone.startRequest(session);
   phone.goTo(30);
 
-  const Assessment& report = phone.reportOf(request);
+  const Report& report = phone.reportOf(request);
   REQUIRE(report.hasPosition);
   CHECK_FALSE(report.phoneActivity.standingStillSinceTheReading);
   CHECK(report.phoneActivity.activityNow == PhoneActivity::StandingStill);
@@ -1251,12 +1251,12 @@ TEST_CASE("the background also ends what is known about the phone activity") {
   phone.goTo(10);
   phone.appGoesToBackground();
 
-  // Back in the foreground, an evaluation gets nothing new from the GPS.
+  // Back in the foreground, a request gets nothing new from the GPS.
   phone.goTo(20);
-  const std::uint32_t request = phone.startEvaluation(session);
+  const std::uint32_t request = phone.startRequest(session);
   phone.goTo(40);
 
-  const Assessment& report = phone.reportOf(request);
+  const Report& report = phone.reportOf(request);
   REQUIRE(report.hasPosition);
   // Standing still until second 10; after that, nobody was watching.
   CHECK_FALSE(report.phoneActivity.standingStillSinceTheReading);
@@ -1281,10 +1281,10 @@ TEST_CASE("the engine keeps accepting activity reports during a long session") {
 
   // The latest readings are judged with the latest reports.
   phone.goTo(500);
-  const std::uint32_t request = phone.startEvaluation(session);
+  const std::uint32_t request = phone.startRequest(session);
   phone.goTo(520);
 
-  const Assessment& report = phone.reportOf(request);
+  const Report& report = phone.reportOf(request);
   REQUIRE(report.hasPosition);
   CHECK(report.phoneActivity.knownUntilNow);
   CHECK_FALSE(report.phoneActivity.hasGaps);  // every second since the reading is known
@@ -1300,7 +1300,7 @@ TEST_CASE("CON-015 a hundred sessions opened and closed leave nothing behind") {
     const std::uint32_t session = phone.openSession(sessionThatKeepsCollecting()).sessionId;
     REQUIRE(session != 0);
     phone.gpsHasAReading(20);
-    phone.startEvaluation(session);
+    phone.startRequest(session);
     phone.nowMs += 500;
     phone.closeSession(session);
 
@@ -1317,9 +1317,9 @@ TEST_CASE("CON-016 CON-018 a hundred cancels with late deliveries: one report ea
   FakePhone phone;
 
   for (int round = 0; round < 100; ++round) {
-    const std::uint32_t request = phone.startEvaluation();
+    const std::uint32_t request = phone.startRequest();
     phone.nowMs += 300;
-    phone.cancelEvaluation(request);
+    phone.cancelRequest(request);
 
     // The system delivers a reading twice after the cancel, and the timer
     // fires late.
@@ -1327,10 +1327,10 @@ TEST_CASE("CON-016 CON-018 a hundred cancels with late deliveries: one report ea
     phone.lateReadingArrives(20);
     phone.engine->whenTimePasses(phone.nowMs + 20000);
     phone.obeyTheEngine();
-    phone.cancelEvaluation(request);
+    phone.cancelRequest(request);
 
     REQUIRE(phone.howManyReportsOf(request) == 1);
-    REQUIRE(phone.reportOf(request).status == AssessmentStatus::Cancelled);
+    REQUIRE(phone.reportOf(request).status == ReportStatus::Cancelled);
     REQUIRE(phone.everythingIsQuiet());
   }
 }
@@ -1357,17 +1357,17 @@ TEST_CASE("INV-10 NFR-05 whatever the app and the phone do, everything ends quie
       } else if (what < 5) {
         const std::uint32_t session =
             sessions.empty() ? 0 : sessions[rng.below(sessions.size())];
-        const EvaluationStarted started =
-            phone.engine->startEvaluation(session, usualEvaluation(), phone.nowMs);
+        const RequestStarted started =
+            phone.engine->startRequest(session, usualRequest(), phone.nowMs);
         phone.obeyTheEngine();
-        if (started.result == EvaluationStarted::Result::Accepted) {
+        if (started.result == RequestStarted::Result::Accepted) {
           requests.push_back(started.requestId);
         }
       } else if (what < 9) {
         const double gpsError = (rng.below(3) == 0) ? 300.0 : 8.0;
         phone.gpsHasAReading(rng.uniform(0.0, 60.0), gpsError);
       } else if (what == 9 && !requests.empty()) {
-        phone.cancelEvaluation(requests[rng.below(requests.size())]);
+        phone.cancelRequest(requests[rng.below(requests.size())]);
       } else if (what == 10 && !sessions.empty()) {
         const std::size_t which = rng.below(sessions.size());
         phone.closeSession(sessions[which]);
@@ -1382,7 +1382,7 @@ TEST_CASE("INV-10 NFR-05 whatever the app and the phone do, everything ends quie
       }
 
       // The GPS is on exactly when something needs it.
-      const bool somethingNeedsTheGps = phone.engine->howManyEvaluationsAreRunning() > 0;
+      const bool somethingNeedsTheGps = phone.engine->howManyRequestsAreRunning() > 0;
       if (somethingNeedsTheGps) {
         REQUIRE(phone.gpsIsOn);
         REQUIRE(phone.timerIsSet);
@@ -1398,7 +1398,7 @@ TEST_CASE("INV-10 NFR-05 whatever the app and the phone do, everything ends quie
     REQUIRE(phone.everythingIsQuiet());
     REQUIRE(phone.engine->howManySessionsAreOpen() == 0);
 
-    // Every evaluation that was accepted produced exactly one report.
+    // Every request that was accepted produced exactly one report.
     for (const std::uint32_t request : requests) {
       REQUIRE(phone.howManyReportsOf(request) == 1);
     }

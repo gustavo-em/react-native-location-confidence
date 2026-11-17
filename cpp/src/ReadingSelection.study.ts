@@ -60,7 +60,7 @@ ONE CALL, STEP BY STEP
 
 WHAT THE REST OF THE ENGINE DOES WITH THE ANSWER
 
-  buildAssessment() in Assessment.cpp takes the chosen reading and writes the
+  buildReport() in Report.cpp takes the chosen reading and writes the
   final report: inside the delivery radius or not, the quality score, the
   reasons. The engine also asks for the best reading before it stores a new
   one in a full history, to know which reading must not lose its place.

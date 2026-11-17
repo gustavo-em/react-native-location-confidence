@@ -2,7 +2,7 @@
 // THE ORDER OF THE CALLS IN THIS FILE
 // =============================================================================
 //
-//   buildAssessment(history, activityHistory, nowMs, asked, request)
+//   buildReport(history, activityHistory, nowMs, asked, request)
 //     |                                                    <- everything starts here
 //     |-- no location permission?  ->  report "unavailable" and stop
 //     |
@@ -28,7 +28,7 @@
 //                30 meters from the address
 //   the phone reported "standing still" during those 2 seconds
 //
-//   buildAssessment()
+//   buildReport()
 //     chooseBestReading()              -> that reading
 //                                         could have moved 0.5 x 2 = 1 meter
 //                                         how far the phone could be = 10 + 1 = 11 meters
@@ -75,14 +75,14 @@
 // WHAT THE REPORT IS USED FOR
 // =============================================================================
 //
-// EvaluationRequest.cpp calls buildAssessment() every time new readings
+// ProximityRequest.cpp calls buildReport() every time new readings
 // arrive, to see whether the answer is already good enough to stop, and one
 // last time when the time is over. The engine hands the final report to the
 // platform code, which turns it into the object the app receives in
 // JavaScript.
 // =============================================================================
 
-#include "Assessment.hpp"
+#include "Report.hpp"
 
 #include "GeoMath.hpp"
 
@@ -93,8 +93,8 @@ namespace lce {
 // =============================================================================
 namespace {
 
-// Public text of each step, in exactly the same order as the EvaluationStep
-// list in Assessment.hpp.
+// Public text of each step, in exactly the same order as the RequestStep
+// list in Report.hpp.
 constexpr const char* STEP_NAMES[] = {
     "started",
     "first_attempt",
@@ -103,8 +103,8 @@ constexpr const char* STEP_NAMES[] = {
     "finished",
 };
 
-static_assert(sizeof(STEP_NAMES) / sizeof(STEP_NAMES[0]) == EVALUATION_STEP_COUNT,
-              "the list of step names does not match the EvaluationStep list");
+static_assert(sizeof(STEP_NAMES) / sizeof(STEP_NAMES[0]) == REQUEST_STEP_COUNT,
+              "the list of step names does not match the RequestStep list");
 
 // Which reason explains a missing permission?
 ReasonCode reasonForMissingPermission(LocationPermission permission) noexcept {
@@ -155,19 +155,19 @@ FixSource findWhereTheReadingCameFrom(const WhatWeKnowAboutReading& best,
 // Available needs all of these: the reading was obtained now, it is precise
 // enough, it is not a probable GPS jump, it is not blocked for being
 // simulated, and the location was not blurred by an approximate permission.
-AssessmentStatus decideTheStatus(const Assessment& assessment,
+ReportStatus decideTheStatus(const Report& report,
                                  const WhatTheAppAskedFor& asked,
                                  bool isProbablyAGpsJump,
                                  bool blockedForBeingSimulated,
                                  bool locationIsOnlyApproximate) noexcept {
   const bool wasObtainedNow =
-      (assessment.source == FixSource::Fresh || assessment.source == FixSource::Recovered);
-  const bool isPreciseEnough = (assessment.gpsErrorMeters <= asked.worstGpsErrorAcceptedMeters);
+      (report.source == FixSource::Fresh || report.source == FixSource::Recovered);
+  const bool isPreciseEnough = (report.gpsErrorMeters <= asked.worstGpsErrorAcceptedMeters);
 
   const bool everythingIsFine = wasObtainedNow && isPreciseEnough && !isProbablyAGpsJump &&
                                 !blockedForBeingSimulated && !locationIsOnlyApproximate;
 
-  return everythingIsFine ? AssessmentStatus::Available : AssessmentStatus::Degraded;
+  return everythingIsFine ? ReportStatus::Available : ReportStatus::Degraded;
 }
 
 // Describes the phone activity for the report.
@@ -209,17 +209,17 @@ PhoneActivitySummary describePhoneActivity(const PhoneActivityHistory& activityH
 }
 
 // Step 6: the reasons that explain a report that has a reading.
-void writeDownTheReasons(Assessment& assessment,
+void writeDownTheReasons(Report& report,
                          const ChosenReading& chosen,
                          const WhatTheAppAskedFor& asked,
                          bool locationIsOnlyApproximate) noexcept {
   const WhatWeKnowAboutReading& best = chosen.best;
-  ReasonSet& reasons = assessment.reasons;
+  ReasonSet& reasons = report.reasons;
 
   // Every distance in the report comes from speeds that are guesses.
   reasons.add(ReasonCode::UncertaintyModelHeuristic);
 
-  const bool isImprecise = (assessment.gpsErrorMeters > asked.worstGpsErrorAcceptedMeters);
+  const bool isImprecise = (report.gpsErrorMeters > asked.worstGpsErrorAcceptedMeters);
   if (isImprecise) {
     reasons.add(ReasonCode::LocationLowAccuracy);
   }
@@ -244,7 +244,7 @@ void writeDownTheReasons(Assessment& assessment,
   if (best.gpsSpeedDoesNotMatchTheMovement) {
     reasons.add(ReasonCode::LocationMetadataInconsistent);
   }
-  if (assessment.phoneActivity.hasGaps) {
+  if (report.phoneActivity.hasGaps) {
     reasons.add(ReasonCode::MotionInsufficientCoverage);
   }
   if (best.timeInEachActivity.twoReportsDisagreed) {
@@ -252,8 +252,8 @@ void writeDownTheReasons(Assessment& assessment,
   }
 
   const bool onlyTheHistoryAndItCannotTell =
-      (assessment.source == FixSource::Cached &&
-       assessment.relation == EvidenceRelation::Inconclusive);
+      (report.source == FixSource::Cached &&
+       report.relation == EvidenceRelation::Inconclusive);
   if (onlyTheHistoryAndItCannotTell) {
     reasons.add(ReasonCode::HistoryOnlyInconclusive);
   }
@@ -264,34 +264,34 @@ void writeDownTheReasons(Assessment& assessment,
 // =============================================================================
 // FUNCTIONS OTHER FILES CAN CALL
 //
-// They are announced in Assessment.hpp.
+// They are announced in Report.hpp.
 // =============================================================================
 
-const char* evaluationStepName(EvaluationStep step) noexcept {
+const char* requestStepName(RequestStep step) noexcept {
   const std::size_t position = static_cast<std::size_t>(step);
-  const bool isARealStep = (position < EVALUATION_STEP_COUNT);
+  const bool isARealStep = (position < REQUEST_STEP_COUNT);
   return isARealStep ? STEP_NAMES[position] : nullptr;
 }
 
-Assessment buildAssessment(const LocationHistory& history,
+Report buildReport(const LocationHistory& history,
                            const PhoneActivityHistory& activityHistory,
                            std::int64_t nowMs,
                            const WhatTheAppAskedFor& asked,
                            const WhatTheRequestKnows& request) noexcept {
   // The report starts as "nothing can be used": unavailable, no position,
   // score 0, inconclusive. The steps below improve it when they can.
-  Assessment assessment;
-  assessment.radiusMeters = asked.radiusMeters;
-  assessment.permissionPrecision = request.permissionPrecision;
-  assessment.readingsExamined = static_cast<std::uint32_t>(history.size());
-  assessment.score = calculateQualityScore(ScoreInput{});
+  Report report;
+  report.radiusMeters = asked.radiusMeters;
+  report.permissionPrecision = request.permissionPrecision;
+  report.readingsExamined = static_cast<std::uint32_t>(history.size());
+  report.score = calculateQualityScore(ScoreInput{});
 
   // Without the location permission no reading may be used, not even one
   // that is still in memory.
   const bool permissionIsGranted = (request.locationPermission == LocationPermission::Granted);
   if (!permissionIsGranted) {
-    assessment.reasons.add(reasonForMissingPermission(request.locationPermission));
-    return assessment;
+    report.reasons.add(reasonForMissingPermission(request.locationPermission));
+    return report;
   }
 
   // --- Step 1: choose the best reading ---------------------------------------
@@ -304,29 +304,29 @@ Assessment buildAssessment(const LocationHistory& history,
   }
 
   const ChosenReading chosen = chooseBestReading(history, activityHistory, nowMs, rules);
-  assessment.gpsJumpsFound = static_cast<std::uint32_t>(chosen.howManyAreProbablyGpsJumps);
+  report.gpsJumpsFound = static_cast<std::uint32_t>(chosen.howManyAreProbablyGpsJumps);
 
   if (!chosen.found) {
-    assessment.reasons.add(ReasonCode::NoUsableFix);
+    report.reasons.add(ReasonCode::NoUsableFix);
     if (history.empty()) {
-      assessment.reasons.add(ReasonCode::HistoryEmpty);
+      report.reasons.add(ReasonCode::HistoryEmpty);
     }
     if (chosen.howManyWereTooOld > 0) {
-      assessment.reasons.add(ReasonCode::LocationStale);
+      report.reasons.add(ReasonCode::LocationStale);
     }
-    assessment.phoneActivity = describePhoneActivity(activityHistory, nullptr, nowMs, asked);
-    return assessment;
+    report.phoneActivity = describePhoneActivity(activityHistory, nullptr, nowMs, asked);
+    return report;
   }
 
   const WhatWeKnowAboutReading& best = chosen.best;
 
-  assessment.hasPosition = true;
-  assessment.position = best.reading.position;
-  assessment.gpsErrorMeters = best.reading.horizontalAccuracyMeters;
-  assessment.howFarPhoneCouldBeMeters = best.howFarPhoneCouldBeMeters;
-  assessment.readingAgeMs = best.ageMs;
-  assessment.mockSignal = best.reading.mockSignal;
-  assessment.ageReliability = best.reading.captureTimeWasEstimated ? AgeReliability::Estimated
+  report.hasPosition = true;
+  report.position = best.reading.position;
+  report.gpsErrorMeters = best.reading.horizontalAccuracyMeters;
+  report.howFarPhoneCouldBeMeters = best.howFarPhoneCouldBeMeters;
+  report.readingAgeMs = best.ageMs;
+  report.mockSignal = best.reading.mockSignal;
+  report.ageReliability = best.reading.captureTimeWasEstimated ? AgeReliability::Estimated
                                                                   : AgeReliability::Monotonic;
 
   // Things about the reading that several steps below need to know.
@@ -339,10 +339,10 @@ Assessment buildAssessment(const LocationHistory& history,
        request.permissionPrecision == PermissionPrecision::Approximate);
 
   // --- Step 2: where did the reading come from? ------------------------------
-  assessment.source = findWhereTheReadingCameFrom(best, asked, request);
+  report.source = findWhereTheReadingCameFrom(best, asked, request);
 
   // --- Step 3: compare it with the delivery radius ---------------------------
-  assessment.distanceToDestinationMeters =
+  report.distanceToDestinationMeters =
       distanceBetweenMeters(best.reading.position, asked.destination);
 
   RelationGates gates;
@@ -353,8 +353,8 @@ Assessment buildAssessment(const LocationHistory& history,
   gates.strongJumpSuspicion = isProbablyAGpsJump;
   gates.blockedByMockPolicy = blockedForBeingSimulated;
 
-  assessment.relation = classifyRelation(assessment.distanceToDestinationMeters,
-                                         assessment.howFarPhoneCouldBeMeters,
+  report.relation = classifyRelation(report.distanceToDestinationMeters,
+                                         report.howFarPhoneCouldBeMeters,
                                          asked.radiusMeters, gates);
 
   // --- Step 4: the quality score ---------------------------------------------
@@ -367,23 +367,23 @@ Assessment buildAssessment(const LocationHistory& history,
   scoreInput.movementIsUnknown = best.distanceMoved.weOnlyAssumedTheWorst();
   scoreInput.consistency = consistencyFromAgreeingReadings(best.jumpCheck.readingsOnItsSide,
                                                            someReadingContradictsIt);
-  scoreInput.source = assessment.source;
+  scoreInput.source = report.source;
   scoreInput.onlyApproximatePermission = locationIsOnlyApproximate;
   scoreInput.suspectedJump = isProbablyAGpsJump;
   scoreInput.mockSignal = best.reading.mockSignal;
   scoreInput.mockPolicy = asked.mockPolicy;
 
-  assessment.score = calculateQualityScore(scoreInput);
+  report.score = calculateQualityScore(scoreInput);
 
   // --- Step 5: available or degraded? ----------------------------------------
-  assessment.status = decideTheStatus(assessment, asked, isProbablyAGpsJump,
+  report.status = decideTheStatus(report, asked, isProbablyAGpsJump,
                                       blockedForBeingSimulated, locationIsOnlyApproximate);
 
   // --- Step 6: the phone activity and the reasons ----------------------------
-  assessment.phoneActivity = describePhoneActivity(activityHistory, &best, nowMs, asked);
-  writeDownTheReasons(assessment, chosen, asked, locationIsOnlyApproximate);
+  report.phoneActivity = describePhoneActivity(activityHistory, &best, nowMs, asked);
+  writeDownTheReasons(report, chosen, asked, locationIsOnlyApproximate);
 
-  return assessment;
+  return report;
 }
 
 }  // namespace lce

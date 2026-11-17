@@ -8,14 +8,14 @@
 //
 //   whenReadingsArrive()                             <- the GPS delivered readings
 //     |-- the total time is over?   ->  whenTimePasses()
-//     |-- buildAssessment()                             (Assessment.cpp)
+//     |-- buildReport()                                 (Report.cpp)
 //     |-- the answer is "available"?         ->  finishWith(that report)
 //     `-- weak, and still the first attempt? ->  beginExtraTime()
 //
 //   whenTimePasses()                                 <- the timer of the platform fired
 //     |-- the total time is over?   ->  finishWithWhatWeRemember()
 //     |-- the first attempt is over?
-//     |      |-- buildAssessment(): is a remembered reading good enough?
+//     |      |-- buildReport(): is a remembered reading good enough?
 //     |      |-- yes, or there is no extra time  ->  finishWithWhatWeRemember()
 //     |      `-- no                              ->  beginExtraTime()
 //     `-- the extra time is over?   ->  finishWithWhatWeRemember()
@@ -24,10 +24,10 @@
 //     `-- finishWith(a report that says why)
 //
 //   finishWithWhatWeRemember()
-//     |-- buildAssessment()
+//     |-- buildReport()
 //     `-- finishWith()
 //
-//   finishWith(report)       the ONLY place where an evaluation ends
+//   finishWith(report)       the ONLY place where a request ends
 //
 // =============================================================================
 // EXAMPLES, STEP BY STEP
@@ -38,7 +38,7 @@
 //
 //   second 0.0   start()                  FIRST ATTEMPT, GPS on, wake up at 4.5
 //   second 1.2   whenReadingsArrive()     one reading, GPS error 8
-//                  buildAssessment()      -> Available, Fresh
+//                  buildReport()          -> Available, Fresh
 //                  finishWith()           the GPS is no longer wanted
 //
 //   the report: steps "started, first_attempt, finished", 1.2 seconds
@@ -47,17 +47,17 @@
 //
 //   second 0.0   start()                  FIRST ATTEMPT
 //   second 1.0   whenReadingsArrive()     GPS error 500
-//                  buildAssessment()      -> Degraded (imprecise)
+//                  buildReport()          -> Degraded (imprecise)
 //                  beginExtraTime()       EXTRA TIME, wake up at 8.0
 //   second 3.0   whenReadingsArrive()     GPS error 8
-//                  buildAssessment()      -> Available, Recovered
+//                  buildReport()          -> Available, Recovered
 //                  finishWith()
 //
 // EXAMPLE 3 - the GPS never answers and nothing is remembered
 //
 //   second 0.0   start()                  FIRST ATTEMPT, wake up at 4.5
 //   second 4.5   whenTimePasses()         the first attempt is over
-//                  buildAssessment()      -> nothing remembered
+//                  buildReport()          -> nothing remembered
 //                  beginExtraTime()       EXTRA TIME, wake up at 11.5
 //   second 11.5  whenTimePasses()         the extra time is over
 //                  finishWithWhatWeRemember()  -> Unavailable, score 0
@@ -71,7 +71,7 @@
 //
 //   second 0.0   start()                  FIRST ATTEMPT
 //   second 4.5   whenTimePasses()         the first attempt is over
-//                  buildAssessment()      -> a reading, the phone stood still
+//                  buildReport()          -> a reading, the phone stood still
 //                  finishWithWhatWeRemember()  -> Degraded, Cached
 //
 //   No extra time is spent: waiting 7 more seconds would not tell us more
@@ -88,13 +88,13 @@
 // WHAT THE REST OF THE ENGINE DOES WITH THIS
 // =============================================================================
 //
-// Engine.cpp keeps a list of the evaluations that are running. Every time
+// Engine.cpp keeps a list of the requests that are running. Every time
 // something happens (readings, the timer, the app going to the background) it
 // tells each of them, and then it asks who is finished, whether the GPS is
 // still wanted by someone, and when the next wake up must be.
 // =============================================================================
 
-#include "EvaluationRequest.hpp"
+#include "ProximityRequest.hpp"
 
 #include "QualityScore.hpp"
 
@@ -112,7 +112,7 @@ std::int64_t notNegative(std::int64_t milliseconds) noexcept {
 
 // A report that is not "available" has a reason for it. This picks the one
 // that explains best why the first attempt was not enough.
-ReasonCode findWhyTheAnswerIsNotGoodEnough(const Assessment& report) noexcept {
+ReasonCode findWhyTheAnswerIsNotGoodEnough(const Report& report) noexcept {
   ReasonCode why = ReasonCode::NoUsableFix;
 
   if (report.reasons.contains(ReasonCode::LocationLowAccuracy)) {
@@ -134,7 +134,7 @@ ReasonCode findWhyTheAnswerIsNotGoodEnough(const Assessment& report) noexcept {
 // to answer right away, without spending the extra time?
 // Yes when the phone stood still ever since that reading was taken, the
 // reading is precise enough and nothing about it is suspicious.
-bool rememberedReadingIsGoodEnough(const Assessment& remembered,
+bool rememberedReadingIsGoodEnough(const Report& remembered,
                                    const WhatTheAppAskedFor& asked) noexcept {
   const bool isPreciseEnough = (remembered.gpsErrorMeters <= asked.worstGpsErrorAcceptedMeters);
   const bool looksLikeAJump = remembered.score.wasLimitedBy(ScoreLimit::SuspectedJump);
@@ -145,8 +145,8 @@ bool rememberedReadingIsGoodEnough(const Assessment& remembered,
 }
 
 // A report with no position at all: unavailable, score 0, inconclusive.
-Assessment reportWithNothing(const EvaluationSettings& settings) noexcept {
-  Assessment report;
+Report reportWithNothing(const RequestSettings& settings) noexcept {
+  Report report;
   report.radiusMeters = settings.asked.radiusMeters;
   report.permissionPrecision = settings.device.permissionPrecision;
   report.score = calculateQualityScore(ScoreInput{});
@@ -158,17 +158,17 @@ Assessment reportWithNothing(const EvaluationSettings& settings) noexcept {
 // =============================================================================
 // FUNCTIONS OTHER FILES CAN CALL
 //
-// They are announced in EvaluationRequest.hpp.
+// They are announced in ProximityRequest.hpp.
 // =============================================================================
 
-void EvaluationRequest::start(std::uint32_t requestId,
+void ProximityRequest::start(std::uint32_t requestId,
                               std::uint32_t sessionId,
-                              const EvaluationSettings& settings,
+                              const RequestSettings& settings,
                               const LocationHistory& history,
                               const PhoneActivityHistory& activityHistory,
                               std::int64_t nowMs) noexcept {
-  // Forget everything from the evaluation that used this object before.
-  *this = EvaluationRequest{};
+  // Forget everything from the request that used this object before.
+  *this = ProximityRequest{};
 
   requestId_ = requestId;
   sessionId_ = sessionId;
@@ -186,7 +186,7 @@ void EvaluationRequest::start(std::uint32_t requestId,
   whatThisRequestKnows_.locationPermission = settings.device.locationPermission;
   whatThisRequestKnows_.permissionPrecision = settings.device.permissionPrecision;
 
-  rememberStep(EvaluationStep::Started);
+  rememberStep(RequestStep::Started);
 
   // The app wants the phone activity to be used, but the phone cannot give it.
   if (settings.asked.usePhoneActivity) {
@@ -204,7 +204,7 @@ void EvaluationRequest::start(std::uint32_t requestId,
   bool gpsCanBeUsed = true;
 
   if (!permissionIsGranted) {
-    gpsCanBeUsed = false;  // buildAssessment() writes down which permission problem it is
+    gpsCanBeUsed = false;  // buildReport() writes down which permission problem it is
   } else if (!device.locationIsTurnedOn) {
     gpsCanBeUsed = false;
     reasons_.add(ReasonCode::LocationServicesDisabled);
@@ -226,15 +226,15 @@ void EvaluationRequest::start(std::uint32_t requestId,
 
   // --- The first attempt begins ----------------------------------------------
   phase_ = Phase::FirstAttempt;
-  rememberStep(EvaluationStep::FirstAttempt);
+  rememberStep(RequestStep::FirstAttempt);
   currentPhaseEndsAtMs_ = nowMs + settings_.firstAttemptTimeMs;
 
   // When the app gave zero milliseconds to the first attempt (or to the whole
-  // evaluation), that time is already over.
+  // request), that time is already over.
   whenTimePasses(history, activityHistory, nowMs);
 }
 
-void EvaluationRequest::whenReadingsArrive(const LocationHistory& history,
+void ProximityRequest::whenReadingsArrive(const LocationHistory& history,
                                            const PhoneActivityHistory& activityHistory,
                                            std::int64_t nowMs,
                                            const NotesAboutNewReadings& notes) noexcept {
@@ -252,10 +252,10 @@ void EvaluationRequest::whenReadingsArrive(const LocationHistory& history,
   }
 
   // Is the answer good enough now?
-  const Assessment reportRightNow =
-      buildAssessment(history, activityHistory, nowMs, settings_.asked, whatThisRequestKnows_);
+  const Report reportRightNow =
+      buildReport(history, activityHistory, nowMs, settings_.asked, whatThisRequestKnows_);
 
-  const bool answerIsGoodEnough = (reportRightNow.status == AssessmentStatus::Available);
+  const bool answerIsGoodEnough = (reportRightNow.status == ReportStatus::Available);
   const bool stillInTheFirstAttempt = (phase_ == Phase::FirstAttempt);
   const bool somethingArrived = (notes.howManyArrived > 0);
   const bool thereIsExtraTime = (settings_.extraTimeMs > 0);
@@ -273,7 +273,7 @@ void EvaluationRequest::whenReadingsArrive(const LocationHistory& history,
   // Otherwise: keep waiting.
 }
 
-void EvaluationRequest::whenTimePasses(const LocationHistory& history,
+void ProximityRequest::whenTimePasses(const LocationHistory& history,
                                        const PhoneActivityHistory& activityHistory,
                                        std::int64_t nowMs) noexcept {
   if (isFinished()) {
@@ -304,8 +304,8 @@ void EvaluationRequest::whenTimePasses(const LocationHistory& history,
     fallbackCause_ = ReasonCode::InitialFixTimeout;
 
     // Before spending the extra time: is a reading we remember good enough?
-    const Assessment remembered =
-        buildAssessment(history, activityHistory, nowMs, settings_.asked, whatThisRequestKnows_);
+    const Report remembered =
+        buildReport(history, activityHistory, nowMs, settings_.asked, whatThisRequestKnows_);
 
     const bool thereIsNoExtraTime = (settings_.extraTimeMs == 0);
 
@@ -322,7 +322,7 @@ void EvaluationRequest::whenTimePasses(const LocationHistory& history,
   // Otherwise: nothing is over yet, keep waiting.
 }
 
-void EvaluationRequest::stop(WhyTheEvaluationStopped why,
+void ProximityRequest::stop(WhyTheRequestStopped why,
                              const LocationHistory& history,
                              const PhoneActivityHistory& activityHistory,
                              std::int64_t nowMs) noexcept {
@@ -330,7 +330,7 @@ void EvaluationRequest::stop(WhyTheEvaluationStopped why,
     return;  // stopping twice, or after the answer, changes nothing
   }
 
-  if (why == WhyTheEvaluationStopped::LocationProviderFailed) {
+  if (why == WhyTheRequestStopped::LocationProviderFailed) {
     // The GPS broke, but what we remember may still be useful.
     reasons_.add(ReasonCode::NativeProviderUnavailable);
     finishWithWhatWeRemember(history, activityHistory, nowMs);
@@ -338,37 +338,37 @@ void EvaluationRequest::stop(WhyTheEvaluationStopped why,
   }
 
   // Every other way of stopping gives a report with no position.
-  Assessment report = reportWithNothing(settings_);
+  Report report = reportWithNothing(settings_);
 
-  if (why == WhyTheEvaluationStopped::CancelledByTheApp) {
-    report.status = AssessmentStatus::Cancelled;
+  if (why == WhyTheRequestStopped::CancelledByTheApp) {
+    report.status = ReportStatus::Cancelled;
     reasons_.add(ReasonCode::RequestCancelled);
 
-  } else if (why == WhyTheEvaluationStopped::AppWentToBackground) {
-    report.status = AssessmentStatus::Cancelled;
+  } else if (why == WhyTheRequestStopped::AppWentToBackground) {
+    report.status = ReportStatus::Cancelled;
     reasons_.add(ReasonCode::AppBackgrounded);
 
-  } else if (why == WhyTheEvaluationStopped::SessionWasClosed) {
-    report.status = AssessmentStatus::Cancelled;
+  } else if (why == WhyTheRequestStopped::SessionWasClosed) {
+    report.status = ReportStatus::Cancelled;
     reasons_.add(ReasonCode::SessionStopped);
 
   } else {
     // LocationPermissionWasLost
-    report.status = AssessmentStatus::Unavailable;
+    report.status = ReportStatus::Unavailable;
     reasons_.add(ReasonCode::PermissionDenied);
   }
 
   finishWith(report, nowMs);
 }
 
-bool EvaluationRequest::wantsPhoneActivityUpdates() const noexcept {
+bool ProximityRequest::wantsPhoneActivityUpdates() const noexcept {
   const bool phoneCanReportItsActivity =
       (settings_.device.phoneActivity == PhoneActivitySupport::Available);
 
   return !isFinished() && settings_.asked.usePhoneActivity && phoneCanReportItsActivity;
 }
 
-std::int64_t EvaluationRequest::nextWakeUpAtMs() const noexcept {
+std::int64_t ProximityRequest::nextWakeUpAtMs() const noexcept {
   // Whichever comes first: the end of the current step or the end of
   // everything.
   std::int64_t wakeUpAtMs = currentPhaseEndsAtMs_;
@@ -380,7 +380,7 @@ std::int64_t EvaluationRequest::nextWakeUpAtMs() const noexcept {
 
 // --- Private pieces ----------------------------------------------------------
 
-void EvaluationRequest::rememberStep(EvaluationStep step) noexcept {
+void ProximityRequest::rememberStep(RequestStep step) noexcept {
   const bool thereIsRoom = (howManySteps_ < MAX_STEPS_IN_REPORT);
   if (thereIsRoom) {
     steps_[howManySteps_] = step;
@@ -388,11 +388,11 @@ void EvaluationRequest::rememberStep(EvaluationStep step) noexcept {
   }
 }
 
-void EvaluationRequest::beginExtraTime(const LocationHistory& history,
+void ProximityRequest::beginExtraTime(const LocationHistory& history,
                                        std::int64_t nowMs) noexcept {
   phase_ = Phase::ExtraTime;
   extraTimeWasUsed_ = true;
-  rememberStep(EvaluationStep::ExtraTime);
+  rememberStep(RequestStep::ExtraTime);
 
   // A reading that arrives from now on was obtained during the extra time.
   whatThisRequestKnows_.firstArrivalNumberOfExtraTime = history.arrivalNumberOfNextReading();
@@ -400,19 +400,19 @@ void EvaluationRequest::beginExtraTime(const LocationHistory& history,
   currentPhaseEndsAtMs_ = nowMs + settings_.extraTimeMs;
 }
 
-void EvaluationRequest::finishWithWhatWeRemember(const LocationHistory& history,
+void ProximityRequest::finishWithWhatWeRemember(const LocationHistory& history,
                                                  const PhoneActivityHistory& activityHistory,
                                                  std::int64_t nowMs) noexcept {
-  rememberStep(EvaluationStep::AnswerFromHistory);
+  rememberStep(RequestStep::AnswerFromHistory);
 
-  const Assessment report =
-      buildAssessment(history, activityHistory, nowMs, settings_.asked, whatThisRequestKnows_);
+  const Report report =
+      buildReport(history, activityHistory, nowMs, settings_.asked, whatThisRequestKnows_);
 
   finishWith(report, nowMs);
 }
 
-void EvaluationRequest::finishWith(Assessment report, std::int64_t nowMs) noexcept {
-  rememberStep(EvaluationStep::Finished);
+void ProximityRequest::finishWith(Report report, std::int64_t nowMs) noexcept {
+  rememberStep(RequestStep::Finished);
 
   report.requestId = requestId_;
   report.sessionId = sessionId_;

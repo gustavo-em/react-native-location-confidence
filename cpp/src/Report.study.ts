@@ -1,14 +1,14 @@
-// Study file: TypeScript mirror of Assessment.hpp and Assessment.cpp.
+// Study file: TypeScript mirror of Report.hpp and Report.cpp.
 // Same names, same order. Not part of the library. If it ever disagrees with
 // the C++, the C++ is right.
-// Run: node --no-warnings --experimental-transform-types cpp/src/Assessment.study.ts
+// Run: node --no-warnings --experimental-transform-types cpp/src/Report.study.ts
 // The examples at the end only run when this file is the one being run.
 
 /*
 THE BUSINESS RULE
 
   The app asks: "is the courier near this address?". The engine answers with
-  a report (an assessment), never with a plain yes or no:
+  a report (a report), never with a plain yes or no:
 
     - which GPS reading was used, how old it is, where it came from;
     - how far the phone could really be from that reading;
@@ -22,7 +22,7 @@ THE BUSINESS RULE
 
 THE ORDER OF THE CALLS
 
-  buildAssessment(history, activityHistory, nowMs, asked, request)
+  buildReport(history, activityHistory, nowMs, asked, request)
   │
   ├─ no location permission?  ->  report "unavailable" and stop
   │
@@ -44,7 +44,7 @@ ONE CALL, STEP BY STEP
                30 meters from the address.
   The phone reported "standing still" during those 2 seconds.
 
-    buildAssessment()
+    buildReport()
       chooseBestReading()              -> that reading
                                           could have moved 0.5 x 2 = 1 meter
                                           how far the phone could be = 11 meters
@@ -55,7 +55,7 @@ ONE CALL, STEP BY STEP
 
 WHAT THE REST OF THE ENGINE DOES WITH THE ANSWER
 
-  EvaluationRequest.cpp calls buildAssessment() every time new readings
+  ProximityRequest.cpp calls buildReport() every time new readings
   arrive, to see whether the answer is already good enough to stop, and one
   last time when the time is over. The platform code turns the final report
   into the object the app receives in JavaScript.
@@ -86,9 +86,9 @@ import {
 } from './UncertaintyModel.study.ts';
 import type { Coordinates } from './JumpDetector.study.ts';
 
-// Assessment.hpp
+// Report.hpp
 
-export enum AssessmentStatus {
+export enum ReportStatus {
   Available,
   Degraded,
   Unavailable,
@@ -144,8 +144,8 @@ export class PhoneActivitySummary {
   hasGaps: boolean = false;
 }
 
-export class Assessment {
-  status: AssessmentStatus = AssessmentStatus.Unavailable;
+export class Report {
+  status: ReportStatus = ReportStatus.Unavailable;
   source: FixSource = FixSource.Unavailable;
 
   hasPosition: boolean = false;
@@ -169,7 +169,7 @@ export class Assessment {
   gpsJumpsFound: number = 0;
 }
 
-// Assessment.cpp
+// Report.cpp
 
 function reasonForMissingPermission(
   permission: LocationPermission
@@ -211,17 +211,17 @@ function findWhereTheReadingCameFrom(
 }
 
 function decideTheStatus(
-  assessment: Assessment,
+  report: Report,
   asked: WhatTheAppAskedFor,
   isProbablyAGpsJump: boolean,
   blockedForBeingSimulated: boolean,
   locationIsOnlyApproximate: boolean
-): AssessmentStatus {
+): ReportStatus {
   const wasObtainedNow =
-    assessment.source === FixSource.Fresh ||
-    assessment.source === FixSource.Recovered;
+    report.source === FixSource.Fresh ||
+    report.source === FixSource.Recovered;
   const isPreciseEnough =
-    assessment.gpsErrorMeters <= asked.worstGpsErrorAcceptedMeters;
+    report.gpsErrorMeters <= asked.worstGpsErrorAcceptedMeters;
 
   const everythingIsFine =
     wasObtainedNow &&
@@ -231,8 +231,8 @@ function decideTheStatus(
     !locationIsOnlyApproximate;
 
   return everythingIsFine
-    ? AssessmentStatus.Available
-    : AssessmentStatus.Degraded;
+    ? ReportStatus.Available
+    : ReportStatus.Degraded;
 }
 
 function describePhoneActivity(
@@ -276,18 +276,18 @@ function describePhoneActivity(
 }
 
 function writeDownTheReasons(
-  assessment: Assessment,
+  report: Report,
   chosen: ChosenReading,
   best: WhatWeKnowAboutReading,
   asked: WhatTheAppAskedFor,
   locationIsOnlyApproximate: boolean
 ): void {
-  const reasons = assessment.reasons;
+  const reasons = report.reasons;
 
   reasons.add(ReasonCode.UncertaintyModelHeuristic);
 
   const isImprecise =
-    assessment.gpsErrorMeters > asked.worstGpsErrorAcceptedMeters;
+    report.gpsErrorMeters > asked.worstGpsErrorAcceptedMeters;
   if (isImprecise) {
     reasons.add(ReasonCode.LocationLowAccuracy);
   }
@@ -312,7 +312,7 @@ function writeDownTheReasons(
   if (best.gpsSpeedDoesNotMatchTheMovement) {
     reasons.add(ReasonCode.LocationMetadataInconsistent);
   }
-  if (assessment.phoneActivity.hasGaps) {
+  if (report.phoneActivity.hasGaps) {
     reasons.add(ReasonCode.MotionInsufficientCoverage);
   }
   if (best.timeInEachActivity.twoReportsDisagreed) {
@@ -320,33 +320,33 @@ function writeDownTheReasons(
   }
 
   const onlyTheHistoryAndItCannotTell =
-    assessment.source === FixSource.Cached &&
-    assessment.relation === EvidenceRelation.Inconclusive;
+    report.source === FixSource.Cached &&
+    report.relation === EvidenceRelation.Inconclusive;
   if (onlyTheHistoryAndItCannotTell) {
     reasons.add(ReasonCode.HistoryOnlyInconclusive);
   }
 }
 
-export function buildAssessment(
+export function buildReport(
   history: readonly LocationReading[],
   activityHistory: PhoneActivityHistory,
   nowMs: number,
   asked: WhatTheAppAskedFor,
   request: WhatTheRequestKnows
-): Assessment {
-  const assessment = new Assessment();
-  assessment.radiusMeters = asked.radiusMeters;
-  assessment.permissionPrecision = request.permissionPrecision;
-  assessment.readingsExamined = history.length;
-  assessment.score = calculateQualityScore(new ScoreInput());
+): Report {
+  const report = new Report();
+  report.radiusMeters = asked.radiusMeters;
+  report.permissionPrecision = request.permissionPrecision;
+  report.readingsExamined = history.length;
+  report.score = calculateQualityScore(new ScoreInput());
 
   const permissionIsGranted =
     request.locationPermission === LocationPermission.Granted;
   if (!permissionIsGranted) {
-    assessment.reasons.add(
+    report.reasons.add(
       reasonForMissingPermission(request.locationPermission)
     );
-    return assessment;
+    return report;
   }
 
   // Step 1
@@ -360,33 +360,33 @@ export function buildAssessment(
   }
 
   const chosen = chooseBestReading(history, activityHistory, nowMs, rules);
-  assessment.gpsJumpsFound = chosen.howManyAreProbablyGpsJumps;
+  report.gpsJumpsFound = chosen.howManyAreProbablyGpsJumps;
 
   const best = chosen.best;
   if (best === undefined) {
-    assessment.reasons.add(ReasonCode.NoUsableFix);
+    report.reasons.add(ReasonCode.NoUsableFix);
     if (history.length === 0) {
-      assessment.reasons.add(ReasonCode.HistoryEmpty);
+      report.reasons.add(ReasonCode.HistoryEmpty);
     }
     if (chosen.howManyWereTooOld > 0) {
-      assessment.reasons.add(ReasonCode.LocationStale);
+      report.reasons.add(ReasonCode.LocationStale);
     }
-    assessment.phoneActivity = describePhoneActivity(
+    report.phoneActivity = describePhoneActivity(
       activityHistory,
       undefined,
       nowMs,
       asked
     );
-    return assessment;
+    return report;
   }
 
-  assessment.hasPosition = true;
-  assessment.position = best.reading.position;
-  assessment.gpsErrorMeters = best.reading.horizontalAccuracyMeters;
-  assessment.howFarPhoneCouldBeMeters = best.howFarPhoneCouldBeMeters;
-  assessment.readingAgeMs = best.ageMs;
-  assessment.mockSignal = best.reading.mockSignal;
-  assessment.ageReliability = best.reading.captureTimeWasEstimated
+  report.hasPosition = true;
+  report.position = best.reading.position;
+  report.gpsErrorMeters = best.reading.horizontalAccuracyMeters;
+  report.howFarPhoneCouldBeMeters = best.howFarPhoneCouldBeMeters;
+  report.readingAgeMs = best.ageMs;
+  report.mockSignal = best.reading.mockSignal;
+  report.ageReliability = best.reading.captureTimeWasEstimated
     ? AgeReliability.Estimated
     : AgeReliability.Monotonic;
 
@@ -401,10 +401,10 @@ export function buildAssessment(
     request.permissionPrecision === PermissionPrecision.Approximate;
 
   // Step 2
-  assessment.source = findWhereTheReadingCameFrom(best, asked, request);
+  report.source = findWhereTheReadingCameFrom(best, asked, request);
 
   // Step 3
-  assessment.distanceToDestinationMeters = distanceBetweenMeters(
+  report.distanceToDestinationMeters = distanceBetweenMeters(
     best.reading.position,
     asked.destination
   );
@@ -417,9 +417,9 @@ export function buildAssessment(
   gates.strongJumpSuspicion = isProbablyAGpsJump;
   gates.blockedByMockPolicy = blockedForBeingSimulated;
 
-  assessment.relation = classifyRelation(
-    assessment.distanceToDestinationMeters,
-    assessment.howFarPhoneCouldBeMeters,
+  report.relation = classifyRelation(
+    report.distanceToDestinationMeters,
+    report.howFarPhoneCouldBeMeters,
     asked.radiusMeters,
     gates
   );
@@ -436,17 +436,17 @@ export function buildAssessment(
     best.jumpCheck.readingsOnItsSide,
     someReadingContradictsIt
   );
-  scoreInput.source = assessment.source;
+  scoreInput.source = report.source;
   scoreInput.onlyApproximatePermission = locationIsOnlyApproximate;
   scoreInput.suspectedJump = isProbablyAGpsJump;
   scoreInput.mockSignal = best.reading.mockSignal;
   scoreInput.mockPolicy = asked.mockPolicy;
 
-  assessment.score = calculateQualityScore(scoreInput);
+  report.score = calculateQualityScore(scoreInput);
 
   // Step 5
-  assessment.status = decideTheStatus(
-    assessment,
+  report.status = decideTheStatus(
+    report,
     asked,
     isProbablyAGpsJump,
     blockedForBeingSimulated,
@@ -454,21 +454,21 @@ export function buildAssessment(
   );
 
   // Step 6
-  assessment.phoneActivity = describePhoneActivity(
+  report.phoneActivity = describePhoneActivity(
     activityHistory,
     best,
     nowMs,
     asked
   );
   writeDownTheReasons(
-    assessment,
+    report,
     chosen,
     best,
     asked,
     locationIsOnlyApproximate
   );
 
-  return assessment;
+  return report;
 }
 
 // Borrowed from Types.hpp, ReasonCodes.hpp, ProximityRelation.cpp and
@@ -765,9 +765,9 @@ export function calculateQualityScore(input: ScoreInput): ScoreResult {
 
 function show(
   text: string,
-  assessment: Assessment,
+  report: Report,
   expected: Readonly<{
-    status: AssessmentStatus;
+    status: ReportStatus;
     source: FixSource;
     relation: EvidenceRelation;
     rawScore: number;
@@ -775,31 +775,31 @@ function show(
   }>
 ): void {
   const upToDate =
-    assessment.status === expected.status &&
-    assessment.source === expected.source &&
-    assessment.relation === expected.relation &&
-    assessment.score.rawScore === expected.rawScore &&
-    assessment.score.qualityScore === expected.qualityScore;
+    report.status === expected.status &&
+    report.source === expected.source &&
+    report.relation === expected.relation &&
+    report.score.rawScore === expected.rawScore &&
+    report.score.qualityScore === expected.qualityScore;
   if (!upToDate) {
     throw new Error(
       `${text}: out of date, the C++ tests expect another report`
     );
   }
 
-  const limits = [...assessment.score.limitsApplied]
+  const limits = [...report.score.limitsApplied]
     .map((limit) => ScoreLimit[limit])
     .join(', ');
 
   console.log(text);
   console.log(
-    `  ${AssessmentStatus[assessment.status]}, ${FixSource[assessment.source]},` +
-      ` ${EvidenceRelation[assessment.relation]}`
+    `  ${ReportStatus[report.status]}, ${FixSource[report.source]},` +
+      ` ${EvidenceRelation[report.relation]}`
   );
   console.log(
-    `  score ${assessment.score.qualityScore} (before limits ${assessment.score.rawScore})` +
+    `  score ${report.score.qualityScore} (before limits ${report.score.rawScore})` +
       (limits === '' ? '' : `   limits: ${limits}`)
   );
-  console.log(`  reasons: ${[...assessment.reasons].join(', ')}`);
+  console.log(`  reasons: ${[...report.reasons].join(', ')}`);
 }
 
 function phoneReported(
@@ -823,7 +823,7 @@ if (import.meta.main) {
 
   show(
     'one good reading obtained right now (fixture 12.2)',
-    buildAssessment(
+    buildReport(
       [readingNorth(0, 30, 10, 1)],
       phoneReported(PhoneActivity.StandingStill, 0, 2),
       2000,
@@ -831,7 +831,7 @@ if (import.meta.main) {
       obtainedEverything
     ),
     {
-      status: AssessmentStatus.Available,
+      status: ReportStatus.Available,
       source: FixSource.Fresh,
       relation: EvidenceRelation.SupportsInside,
       rawScore: 89,
@@ -844,7 +844,7 @@ if (import.meta.main) {
 
   show(
     'an old reading in a vehicle, taken from the history (fixture 12.3)',
-    buildAssessment(
+    buildReport(
       [
         readingNorth(0, 30, 10, 1),
         readingNorth(5, 30, 10, 2),
@@ -856,7 +856,7 @@ if (import.meta.main) {
       obtainedNothing
     ),
     {
-      status: AssessmentStatus.Degraded,
+      status: ReportStatus.Degraded,
       source: FixSource.Cached,
       relation: EvidenceRelation.Inconclusive,
       rawScore: 72,
@@ -866,7 +866,7 @@ if (import.meta.main) {
 
   show(
     'the only reading is 90 seconds old',
-    buildAssessment(
+    buildReport(
       [readingNorth(0, 0, 5, 1)],
       new PhoneActivityHistory(),
       90000,
@@ -874,7 +874,7 @@ if (import.meta.main) {
       obtainedEverything
     ),
     {
-      status: AssessmentStatus.Unavailable,
+      status: ReportStatus.Unavailable,
       source: FixSource.Unavailable,
       relation: EvidenceRelation.Inconclusive,
       rawScore: 0,
@@ -884,7 +884,7 @@ if (import.meta.main) {
 
   show(
     'a fresh reading 500 meters from the address',
-    buildAssessment(
+    buildReport(
       [readingNorth(0, 500, 10, 1)],
       new PhoneActivityHistory(),
       1000,
@@ -892,7 +892,7 @@ if (import.meta.main) {
       obtainedEverything
     ),
     {
-      status: AssessmentStatus.Available,
+      status: ReportStatus.Available,
       source: FixSource.Fresh,
       relation: EvidenceRelation.SupportsOutside,
       rawScore: 81,
@@ -902,7 +902,7 @@ if (import.meta.main) {
 
   show(
     'the GPS jumps away and comes back (fixture 12.6)',
-    buildAssessment(
+    buildReport(
       [
         readingNorth(0, 0, 5, 1),
         readingNorth(2, 500, 5, 2),
@@ -914,7 +914,7 @@ if (import.meta.main) {
       obtainedEverything
     ),
     {
-      status: AssessmentStatus.Available,
+      status: ReportStatus.Available,
       source: FixSource.Fresh,
       relation: EvidenceRelation.SupportsInside,
       rawScore: 88,

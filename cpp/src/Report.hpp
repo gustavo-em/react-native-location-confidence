@@ -1,7 +1,7 @@
-// The final report of one evaluation.
+// The final report of one request.
 //
 // The app asks: "is the courier near this address?". The engine never answers
-// just yes or no. It answers with a report, called an assessment, that says:
+// just yes or no. It answers with a report, called a report, that says:
 //
 //   - which GPS reading was used, how old it is and where it came from;
 //   - how far the phone could really be from that reading;
@@ -14,7 +14,7 @@
 // readings and what the phone reported about its activity. It does not wait
 // for anything and it does not talk to the GPS. Asking the GPS for new
 // readings, and deciding how long to wait for them, is the job of
-// EvaluationRequest.cpp.
+// ProximityRequest.cpp.
 //
 // The steps:
 //
@@ -29,9 +29,9 @@
 // delivery and never proof that a person was at the address.
 //
 // A picture of the order of the calls, with examples worked step by step, is
-// at the top of Assessment.cpp.
-#ifndef LCE_ASSESSMENT_HPP
-#define LCE_ASSESSMENT_HPP
+// at the top of Report.cpp.
+#ifndef LCE_REPORT_HPP
+#define LCE_REPORT_HPP
 
 #include <array>
 #include <cstddef>
@@ -49,7 +49,7 @@
 namespace lce {
 
 // How good the answer is as a whole.
-enum class AssessmentStatus : std::uint8_t {
+enum class ReportStatus : std::uint8_t {
   // A reading obtained just now, precise enough, with nothing suspicious.
   Available,
 
@@ -60,7 +60,7 @@ enum class AssessmentStatus : std::uint8_t {
   // There is no reading we can use.
   Unavailable,
 
-  // The evaluation was stopped before it finished.
+  // The request was stopped before it finished.
   Cancelled,
 };
 
@@ -83,7 +83,7 @@ enum class LocationPermission : std::uint8_t {
 // Whether the user allowed the precise location or only an approximate one.
 enum class PermissionPrecision : std::uint8_t { Precise, Approximate, Unknown };
 
-// What the app asked for in this evaluation.
+// What the app asked for in this request.
 struct WhatTheAppAskedFor {
   // The address, and how close to it counts as "there".
   Coordinates destination;
@@ -113,7 +113,7 @@ struct WhatTheAppAskedFor {
   MockPolicy mockPolicy = MockPolicy::ZeroScore;
 };
 
-// What the evaluation request knows when it asks for a report.
+// What the request knows when it asks for a report.
 struct WhatTheRequestKnows {
   // The arrival number the history was going to give next when this request
   // started. Every reading with this number or a higher one was obtained by
@@ -147,8 +147,8 @@ struct PhoneActivitySummary {
   bool hasGaps = false;
 };
 
-// The steps an evaluation went through, in the order they happened.
-enum class EvaluationStep : std::uint8_t {
+// The steps a request went through, in the order they happened.
+enum class RequestStep : std::uint8_t {
   Started = 0,
   FirstAttempt,       // waiting for a good reading from the GPS
   ExtraTime,          // the first attempt was not enough: waiting some more
@@ -157,23 +157,23 @@ enum class EvaluationStep : std::uint8_t {
   Count  // not a step: only tells how many steps exist
 };
 
-inline constexpr std::size_t EVALUATION_STEP_COUNT =
-    static_cast<std::size_t>(EvaluationStep::Count);
+inline constexpr std::size_t REQUEST_STEP_COUNT =
+    static_cast<std::size_t>(RequestStep::Count);
 
 // The report can list at most this many steps.
 inline constexpr std::size_t MAX_STEPS_IN_REPORT = 8;
 
 // Public text of a step, for example "first_attempt".
-const char* evaluationStepName(EvaluationStep step) noexcept;
+const char* requestStepName(RequestStep step) noexcept;
 
 // THE FINAL REPORT.
-struct Assessment {
+struct Report {
   // Which request and which session this report belongs to (0 = none).
   // Filled by the engine.
   std::uint32_t requestId = 0;
   std::uint32_t sessionId = 0;
 
-  AssessmentStatus status = AssessmentStatus::Unavailable;
+  ReportStatus status = ReportStatus::Unavailable;
   FixSource source = FixSource::Unavailable;
 
   // The reading that was used. When `hasPosition` is false there is none and
@@ -202,10 +202,10 @@ struct Assessment {
   // Why the report says what it says.
   ReasonSet reasons;
 
-  // --- Filled by the evaluation request (EvaluationRequest.cpp) ---------------
+  // --- Filled by the request (ProximityRequest.cpp) ---------------
 
-  // The steps the evaluation went through.
-  std::array<EvaluationStep, MAX_STEPS_IN_REPORT> steps{};
+  // The steps the request went through.
+  std::array<RequestStep, MAX_STEPS_IN_REPORT> steps{};
   std::size_t howManySteps = 0;
 
   bool firstAttemptTimedOut = false;
@@ -233,11 +233,11 @@ struct Assessment {
 //   activityHistory    what the phone reported about its activity
 //   nowMs              the current time, on the same clock as the readings
 //   asked              what the app asked for (address, radius, limits)
-//   request            what the evaluation request knows (which readings it
+//   request            what the request knows (which readings it
 //                      obtained itself, the permission)
 //
-// The status is never Cancelled here: only the evaluation request cancels.
-Assessment buildAssessment(const LocationHistory& history,
+// The status is never Cancelled here: only the request cancels.
+Report buildReport(const LocationHistory& history,
                            const PhoneActivityHistory& activityHistory,
                            std::int64_t nowMs,
                            const WhatTheAppAskedFor& asked,
@@ -245,4 +245,4 @@ Assessment buildAssessment(const LocationHistory& history,
 
 }  // namespace lce
 
-#endif  // LCE_ASSESSMENT_HPP
+#endif  // LCE_REPORT_HPP
