@@ -7,7 +7,15 @@ Every coordinate in these recordings is made up. The simulator feeds made-up
 GPS readings to the real library, so what the panel shows is what the engine
 really answers. No real location is read.
 
-The same six situations are in `android/` and in `ios/`:
+There are three folders:
+
+| Folder | Recorded on | Language of the app |
+|---|---|---|
+| `android/` | Android emulator | English |
+| `ios/` | iOS Simulator | English |
+| `ios-pt/` | iOS Simulator | Portuguese |
+
+Each folder has the same six situations:
 
 | File | What it shows |
 |---|---|
@@ -15,13 +23,18 @@ The same six situations are in `android/` and in `ios/`:
 | `signal-lost-vs-standing-still.mp4` | Two runs side by side (about 25 s). Left: the GPS goes silent and nothing tells whether the phone moved. Right: the same silence, but the phone reports that it is standing still. |
 | `arriving.png` | A courier rode to the address and parked. Several readings agree. |
 | `gps-jump.png` | One reading landed 340 m away (the red dot). It is not used. |
-| `signal-lost.png` | 12 s without a reading: the phone could be more than 200 m away by now. |
-| `standing-still.png` | 16 s without a reading, phone standing still: 16 m. |
+| `signal-lost.png` | About 13 s without a reading: the phone could be more than 200 m away by now. |
+| `standing-still.png` | More than 16 s without a reading, phone standing still: 16 m. |
 | `fake-gps.png` | The courier is 150 m away; a fake-GPS app reports the door. |
 | `approximate-only.png` | Only the approximate location is allowed. |
 
-The answers are the same on the two platforms, because the engine is the
-same code.
+`ios/language-switch.mp4` (16 s) shows the app going from English to
+Portuguese while a situation plays: the switch only changes the words, and
+the situation keeps going.
+
+The answers are the same on the two platforms and in the two languages. The
+engine is the same code, and the language only chooses the words on the
+screen.
 
 ## What to look at
 
@@ -51,3 +64,13 @@ adb emu screenrecord start --time-limit 170 --fps 30 demo.webm
 # tap the situations in the app
 adb emu screenrecord stop
 ```
+
+To record in Portuguese, tap "Português" at the top of the app before
+starting, or open the app already in Portuguese on the Simulator:
+
+```sh
+xcrun simctl launch booted locationconfidence.example -AppleLanguages "(pt-BR)" -AppleLocale pt_BR
+```
+
+A Simulator that was just created shows a system notice or two in its first
+minutes. Wait for them to go away before recording.
