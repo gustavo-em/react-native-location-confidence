@@ -24,6 +24,14 @@ export default defineConfig([
     },
   },
   {
-    ignores: ['node_modules/', 'lib/', 'example/dist/'],
+    // Build folders hold generated files: test reports written in
+    // JavaScript, and CMake files that happen to end in ".ts".
+    ignores: [
+      'node_modules/',
+      'lib/',
+      'example/dist/',
+      '**/build/',
+      '.build/',
+    ],
   },
 ]);
