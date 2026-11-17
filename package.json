@@ -50,7 +50,13 @@
   "keywords": [
     "react-native",
     "ios",
-    "android"
+    "android",
+    "location",
+    "geolocation",
+    "gps",
+    "proximity",
+    "delivery",
+    "turbo-module"
   ],
   "repository": {
     "type": "git",

@@ -2,9 +2,9 @@
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the versions follow [Semantic Versioning](https://semver.org/).
 
-## Unreleased
+## 0.1.0 - 2026-11-17
 
-Nothing has been published yet. This is what version 0.1.0 will contain.
+The first published version.
 
 ### Added
 

@@ -28,6 +28,9 @@ Each folder has the same six situations:
 | `fake-gps.png` | The courier is 150 m away; a fake-GPS app reports the door. |
 | `approximate-only.png` | Only the approximate location is allowed. |
 
+`signal-lost-vs-standing-still.gif` is the animation at the top of the main
+README: the iOS side-by-side video, smaller and without sound.
+
 `ios/language-switch.mp4` (16 s) shows the app going from English to
 Portuguese while a situation plays: the switch only changes the words, and
 the situation keeps going.
