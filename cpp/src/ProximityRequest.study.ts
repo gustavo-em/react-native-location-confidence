@@ -383,8 +383,7 @@ export class ProximityRequest {
       this.whatThisRequestKnows_
     );
 
-    const answerIsGoodEnough =
-      reportRightNow.status === ReportStatus.Available;
+    const answerIsGoodEnough = reportRightNow.status === ReportStatus.Available;
     const stillInTheFirstAttempt = this.phase_ === Phase.FirstAttempt;
     const somethingArrived = notes.howManyArrived > 0;
     const thereIsExtraTime = this.settings_.extraTimeMs > 0;

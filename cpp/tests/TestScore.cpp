@@ -238,7 +238,7 @@ TEST_CASE("SCR-031 values ending in .5 round half up") {
   input.horizontalAccuracyMeters = 1.26;
   CHECK(calculateQualityScore(input).rawScore == 93);
 
-  // Exact halves that binary floating point evaluates to x.49999999999999.
+  // Exact halves that binary floating point computes as x.49999999999999.
   // Plain floor(x + 0.5) would round these down.
   input.horizontalAccuracyMeters = 0.0;
   input.ageMs = 6000.0;  // 40 + 22.5 + 20 + 9 = 91.5

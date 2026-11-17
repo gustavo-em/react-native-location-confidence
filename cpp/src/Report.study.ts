@@ -218,8 +218,7 @@ function decideTheStatus(
   locationIsOnlyApproximate: boolean
 ): ReportStatus {
   const wasObtainedNow =
-    report.source === FixSource.Fresh ||
-    report.source === FixSource.Recovered;
+    report.source === FixSource.Fresh || report.source === FixSource.Recovered;
   const isPreciseEnough =
     report.gpsErrorMeters <= asked.worstGpsErrorAcceptedMeters;
 
@@ -230,9 +229,7 @@ function decideTheStatus(
     !blockedForBeingSimulated &&
     !locationIsOnlyApproximate;
 
-  return everythingIsFine
-    ? ReportStatus.Available
-    : ReportStatus.Degraded;
+  return everythingIsFine ? ReportStatus.Available : ReportStatus.Degraded;
 }
 
 function describePhoneActivity(
@@ -286,8 +283,7 @@ function writeDownTheReasons(
 
   reasons.add(ReasonCode.UncertaintyModelHeuristic);
 
-  const isImprecise =
-    report.gpsErrorMeters > asked.worstGpsErrorAcceptedMeters;
+  const isImprecise = report.gpsErrorMeters > asked.worstGpsErrorAcceptedMeters;
   if (isImprecise) {
     reasons.add(ReasonCode.LocationLowAccuracy);
   }
@@ -343,9 +339,7 @@ export function buildReport(
   const permissionIsGranted =
     request.locationPermission === LocationPermission.Granted;
   if (!permissionIsGranted) {
-    report.reasons.add(
-      reasonForMissingPermission(request.locationPermission)
-    );
+    report.reasons.add(reasonForMissingPermission(request.locationPermission));
     return report;
   }
 
@@ -460,13 +454,7 @@ export function buildReport(
     nowMs,
     asked
   );
-  writeDownTheReasons(
-    report,
-    chosen,
-    best,
-    asked,
-    locationIsOnlyApproximate
-  );
+  writeDownTheReasons(report, chosen, best, asked, locationIsOnlyApproximate);
 
   return report;
 }
