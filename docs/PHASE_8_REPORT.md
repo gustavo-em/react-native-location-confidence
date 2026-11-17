@@ -138,3 +138,34 @@ Os números de testes são os mesmos de antes da troca. Nenhum teste foi removid
 - Os documentos da Fase 0 continuam com os nomes antigos, de propósito.
 
 **Sobre o arquivo `Untitled`.** O arquivo solto `android/src/main/cpp/Untitled`, citado acima, não está mais na pasta em 17/11/2026. Ele nunca esteve no git, nem no índice, então nenhum comando de git desta sessão poderia tê-lo apagado. A linha que o exclui do pacote continua no `package.json` e é inofensiva.
+
+## Publicação em 17/11/2026
+
+A pedido do owner, o projeto foi publicado no GitHub e a biblioteca no npm. A tag e o release também foram pedidos por ele.
+
+| O quê | Onde | Estado |
+|---|---|---|
+| Repositório | https://github.com/gustavo-em/react-native-location-confidence | público; só o branch `main` foi enviado |
+| Pacote | `react-native-location-confidence@0.1.0` no npm | 101 arquivos, 160 kB compactado; `latest` aponta para a 0.1.0 |
+| Tag e release | `v0.1.0` | aponta para o commit que foi publicado no npm |
+| Integração contínua | primeira execução, no push do `main` | os 10 jobs passaram |
+
+O que foi feito antes de publicar:
+
+- **Histórico.** O rascunho do post do LinkedIn saiu do histórico publicado, por escolha do owner. Ele continua na pasta de trabalho, fora do git. Os branches locais antigos ainda o contêm e não foram enviados. Nenhum commit tem coautoria ou menção ao Claude, e todos usam o e-mail noreply do GitHub.
+- **Documentação pública.** O README ficou curto, porque é o que o npm mostra: uma frase, a animação do app de exemplo, instalação e um exemplo de dez linhas. A referência completa foi para `docs/GUIDE.md`. `docs/COMPARISON.md` compara a biblioteca com as bibliotecas de localização estabelecidas; os dados foram lidos no dia, do registro do npm e das páginas de cada projeto, e as fontes estão listadas. O README continua com as afirmações obrigatórias (PUB-006 a 013).
+- **Pacote empacotado.** O app de exemplo foi compilado contra os arquivos do pacote (`npm pack`, extraído para uma pasta separada), em vez da pasta do repositório: build release no Android (arm64-v8a) e no iOS (Simulador) passaram. Isso cobre o que o PUB-015 quer evitar (arquivo faltando no pacote), mas ainda não é um app criado fora do monorepo.
+
+Como a publicação no npm aconteceu: a conta não tinha confirmação em duas etapas e o npm recusou as duas primeiras tentativas (erro 403). O owner ativou a confirmação e aprovou a publicação no navegador. O npm criou sozinho uma versão `0.0.0-stage`, um marcador temporário da publicação em etapas; ela não é uma versão da biblioteca.
+
+IDs normativos que mudaram de estado:
+
+- PUB-016 (versão e tag): feito.
+- PUB-017 e PUB-018 (integração contínua): os jobs rodaram e passaram.
+- PUB-015: coberto em parte, como descrito acima.
+
+Continua em aberto:
+
+- PUB-025: `peerDependencies` aceita qualquer versão do React Native; só a 0.88.1 foi validada.
+- Aparelhos físicos, Core Motion real, stress e benchmark.
+- O registro do npm mostra o e-mail da conta do owner como mantenedor do pacote. Trocar isso é configuração da conta dele.
