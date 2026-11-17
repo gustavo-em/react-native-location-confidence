@@ -10,12 +10,12 @@
  */
 import { InvalidArgumentError } from './errors';
 import type {
-  NativeEvaluateRequest,
+  NativeRequest,
   NativeSessionOptions,
   NativeSimulatedReading,
 } from './NativeLocationConfidence';
 import type {
-  EvaluateRequest,
+  ProximityRequest,
   SessionOptions,
   SimulatedReading,
 } from './types';
@@ -128,14 +128,14 @@ export function checkSessionOptions(
   }
   const given = options ?? {};
 
-  const collectionMode = given.collectionMode ?? 'evaluations_only';
+  const collectionMode = given.collectionMode ?? 'requests_only';
   const modeIsKnown =
-    collectionMode === 'evaluations_only' ||
+    collectionMode === 'requests_only' ||
     collectionMode === 'foreground_monitoring';
   if (!modeIsKnown) {
     throw new InvalidArgumentError(
       'options.collectionMode',
-      "must be 'evaluations_only' or 'foreground_monitoring'"
+      "must be 'requests_only' or 'foreground_monitoring'"
     );
   }
 
@@ -168,12 +168,12 @@ export function checkSessionOptions(
 }
 
 /**
- * Checks an evaluation request and fills in the defaults.
+ * Checks a request and fills in the defaults.
  * The answer has every field the native side expects.
  */
-export function checkEvaluateRequest(
-  request: EvaluateRequest
-): NativeEvaluateRequest {
+export function checkProximityRequest(
+  request: ProximityRequest
+): NativeRequest {
   requireObject('request', request);
   requireObject('request.destination', request.destination);
 
@@ -214,7 +214,7 @@ export function checkEvaluateRequest(
     LIMITS.totalDeadlineMs.max
   );
 
-  // The first attempt can never be longer than the whole evaluation.
+  // The first attempt can never be longer than the whole request.
   const wantedInitialFixBudgetMs = requireWholeNumberBetween(
     'options.initialFixBudgetMs',
     options.initialFixBudgetMs ?? LIMITS.initialFixBudgetMs.default,

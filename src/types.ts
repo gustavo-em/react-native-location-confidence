@@ -24,8 +24,8 @@ export type AccuracyAuthorization = 'precise' | 'approximate' | 'unknown';
 /**
  * Where the reading used in the answer came from.
  *
- * - `fresh`: obtained by this evaluation, in its first attempt.
- * - `recovered`: obtained by this evaluation, during the extra time.
+ * - `fresh`: obtained by this request, in its first attempt.
+ * - `recovered`: obtained by this request, during the extra time.
  * - `cached`: it was already remembered, or the system handed over an old one.
  * - `unavailable`: there was no usable reading.
  */
@@ -37,9 +37,9 @@ export type FixSource = 'fresh' | 'recovered' | 'cached' | 'unavailable';
  * - `available`: a reading obtained just now, precise enough, nothing suspicious.
  * - `degraded`: there is a reading, but something about it is weak.
  * - `unavailable`: there is no reading that can be used.
- * - `cancelled`: the evaluation was stopped before it finished.
+ * - `cancelled`: the request was stopped before it finished.
  */
-export type AssessmentStatus =
+export type ReportStatus =
   'available' | 'degraded' | 'unavailable' | 'cancelled';
 
 /**
@@ -58,13 +58,13 @@ export type AgeReliability = 'monotonic' | 'estimated' | 'unreliable';
 /** What to do with a reading the system marked as simulated. */
 export type MockLocationPolicy = 'zero_score' | 'flag_only';
 
-/** The final report of one evaluation. */
-export interface Assessment {
+/** The final report of one request. */
+export interface ProximityReport {
   schemaVersion: 1;
   scoreModelVersion: 'heuristic-v1';
   requestId: string;
   sessionId: string | null;
-  status: AssessmentStatus;
+  status: ReportStatus;
   source: FixSource;
 
   /**
@@ -123,7 +123,7 @@ export interface Assessment {
   diagnostics: {
     /** Short fixed labels that explain the answer. Never coordinates. */
     reasonCodes: string[];
-    /** The steps the evaluation went through, in order. */
+    /** The steps the request went through, in order. */
     phaseTrace: string[];
     initialFixTimedOut: boolean;
     recoveryAttempted: boolean;
@@ -144,13 +144,13 @@ export interface Assessment {
 
 export interface SessionOptions {
   /**
-   * - `evaluations_only` (default): the session only remembers the readings
-   *   obtained by its evaluations. Opening it does not turn the GPS on.
+   * - `requests_only` (default): the session only remembers the readings
+   *   obtained by its requests. Opening it does not turn the GPS on.
    * - `foreground_monitoring`: the session keeps collecting readings while it
-   *   is open and the app is visible, so that an evaluation finds a history
+   *   is open and the app is visible, so that a request finds a history
    *   already there. It needs the location permission and uses more battery.
    */
-  collectionMode?: 'evaluations_only' | 'foreground_monitoring';
+  collectionMode?: 'requests_only' | 'foreground_monitoring';
   /** One reading is kept every this many milliseconds. Default 5000. */
   monitoringIntervalMs?: number;
   /** The collecting stops by itself after this long. Default 900000 (15 minutes). */
@@ -163,14 +163,14 @@ export interface Session {
    * - `not_requested`: the session does not collect.
    * - `active`: it is collecting.
    * - `blocked`: collecting was asked for but could not start; `reasonCodes`
-   *   says why. The session is still open and can be used for evaluations.
+   *   says why. The session is still open and can be used for requests.
    */
   monitoring: 'not_requested' | 'active' | 'blocked';
   reasonCodes: string[];
 }
 
-export interface EvaluateOptions {
-  /** The whole evaluation never takes longer than this. Default 12000. */
+export interface ProximityOptions {
+  /** The whole request never takes longer than this. Default 12000. */
   totalDeadlineMs?: number;
   /** How long the first attempt may wait. Default 4500, never above the total. */
   initialFixBudgetMs?: number;
@@ -192,13 +192,13 @@ export interface EvaluateOptions {
   mockLocationPolicy?: MockLocationPolicy;
 }
 
-export interface EvaluateRequest {
-  /** Leave out for an evaluation that works alone and remembers nothing. */
+export interface ProximityRequest {
+  /** Leave out for a request that works alone and remembers nothing. */
   sessionId?: string;
   destination: Coordinates;
   radiusMeters: number;
-  options?: EvaluateOptions;
-  /** Aborting it cancels the evaluation: the answer has status 'cancelled'. */
+  options?: ProximityOptions;
+  /** Aborting it cancels the request: the answer has status 'cancelled'. */
   signal?: AbortSignal;
 }
 
@@ -243,7 +243,7 @@ export interface SimulatedReading {
  * Replaces the GPS with readings your app provides. For demos and tests.
  *
  * While it is enabled the real GPS is never used and no permission is
- * needed. Every assessment then carries the reason code
+ * needed. Every report then carries the reason code
  * `simulated_location_source`, so a simulated answer can never be mistaken
  * for a real one.
  */
@@ -277,7 +277,7 @@ export interface LocationConfidenceApi {
   /** Closes a session and forgets its readings. Safe to call twice. */
   stopSession(sessionId: string): Promise<void>;
 
-  evaluateProximity(request: EvaluateRequest): Promise<Assessment>;
+  getProximityReport(request: ProximityRequest): Promise<ProximityReport>;
 
   simulation: SimulationApi;
 }

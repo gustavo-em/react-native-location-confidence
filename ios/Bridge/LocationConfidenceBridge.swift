@@ -123,7 +123,7 @@ public final class LocationConfidenceBridge: NSObject {
 
   /// Shows iOS's location dialog. This is the ONLY place where the library
   /// asks the user for the location, and it only runs when the app calls it.
-  /// Opening a session or evaluating never asks.
+  /// Opening a session or starting a request never asks.
   @objc public func requestLocationPermission(
     _ resolve: @escaping Resolve, reject: @escaping Reject
   ) {
@@ -211,8 +211,8 @@ public final class LocationConfidenceBridge: NSObject {
 
   // MARK: Requests
 
-  /// `request` has the fields of NativeEvaluateRequest (src/NativeLocationConfidence.ts).
-  @objc public func evaluate(
+  /// `request` has the fields of NativeRequest (src/NativeLocationConfidence.ts).
+  @objc public func getReport(
     _ requestId: String,
     request: [String: Any],
     resolve: @escaping Resolve,
@@ -347,7 +347,7 @@ public final class LocationConfidenceBridge: NSObject {
     return Int(sessionId) ?? -1
   }
 
-  /// The report as the flat object described by NativeAssessment in the
+  /// The report as the flat object described by NativeReport in the
   /// TypeScript spec.
   private static func dictionary(of report: Report, sessionIdFromTheApp: String?) -> [String: Any] {
     return [

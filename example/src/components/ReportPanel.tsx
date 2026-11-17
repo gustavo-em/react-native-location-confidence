@@ -1,5 +1,5 @@
 import { StyleSheet, Text, View } from 'react-native';
-import type { Assessment } from 'react-native-location-confidence';
+import type { ProximityReport } from 'react-native-location-confidence';
 import { colorOfRelation, colors, fonts } from '../theme';
 
 /*
@@ -10,21 +10,21 @@ import { colorOfRelation, colors, fonts } from '../theme';
  */
 
 type Props = Readonly<{
-  assessment: Assessment | null;
+  report: ProximityReport | null;
   /** Earlier answers, oldest first, drawn as a strip of bars. */
-  answers?: readonly Assessment[];
+  answers?: readonly ProximityReport[];
   /** What to say while there is no report yet. */
   whenEmpty: string;
 }>;
 
-function whatTheEvidenceSays(assessment: Assessment): string {
-  if (assessment.status === 'cancelled') {
-    return 'Evaluation cancelled';
-  } else if (assessment.measuredPosition === null) {
+function whatTheEvidenceSays(report: ProximityReport): string {
+  if (report.status === 'cancelled') {
+    return 'Request cancelled';
+  } else if (report.measuredPosition === null) {
     return 'No reading to judge';
-  } else if (assessment.evidenceRelation === 'supports_inside') {
+  } else if (report.evidenceRelation === 'supports_inside') {
     return 'Evidence supports inside the radius';
-  } else if (assessment.evidenceRelation === 'supports_outside') {
+  } else if (report.evidenceRelation === 'supports_outside') {
     return 'Evidence supports outside the radius';
   } else {
     return 'Evidence cannot take a side';
@@ -58,7 +58,7 @@ const LIMITS_IN_PLAIN_WORDS: ReadonlyArray<readonly [string, string]> = [
 
 /** The reasons of a report that has no reading, in plain words. */
 const REASONS_IN_PLAIN_WORDS: ReadonlyArray<readonly [string, string]> = [
-  ['request_cancelled', 'The app cancelled the evaluation.'],
+  ['request_cancelled', 'The app cancelled the request.'],
   ['app_backgrounded', 'The app left the screen.'],
   ['permission_not_determined', 'The location permission was never asked.'],
   ['permission_denied', 'The location permission is denied.'],
@@ -67,25 +67,25 @@ const REASONS_IN_PLAIN_WORDS: ReadonlyArray<readonly [string, string]> = [
   ['play_services_unavailable', 'Google Play services are not available.'],
   ['native_provider_unavailable', 'The location service failed.'],
   ['unknown_session', 'That session is not open.'],
-  ['busy', 'Too many evaluations are running.'],
+  ['busy', 'Too many requests are running.'],
   ['no_usable_fix', 'No usable reading arrived in time.'],
 ];
 
-function whyInPlainWords(assessment: Assessment): string {
-  const limits = assessment.scoreBreakdown?.appliedCaps ?? [];
+function whyInPlainWords(report: ProximityReport): string {
+  const limits = report.scoreBreakdown?.appliedCaps ?? [];
   for (const [limit, words] of LIMITS_IN_PLAIN_WORDS) {
     if (limits.includes(limit)) {
       return words;
     }
   }
   for (const [reason, words] of REASONS_IN_PLAIN_WORDS) {
-    if (assessment.diagnostics.reasonCodes.includes(reason)) {
+    if (report.diagnostics.reasonCodes.includes(reason)) {
       return words;
     }
   }
-  if (assessment.measuredPosition === null) {
+  if (report.measuredPosition === null) {
     return '';
-  } else if (assessment.evidenceRelation === 'inconclusive') {
+  } else if (report.evidenceRelation === 'inconclusive') {
     return 'The phone could be on either side of the radius line.';
   } else {
     return 'Recent readings agree with each other.';
@@ -101,27 +101,27 @@ function seconds(milliseconds: number): string {
 }
 
 const WHERE_THE_READING_CAME_FROM = {
-  fresh: 'obtained by this evaluation',
+  fresh: 'obtained by this request',
   recovered: 'obtained in the extra time',
   cached: 'taken from memory',
   unavailable: 'missing',
 } as const;
 
-function theFacts(assessment: Assessment): string {
+function theFacts(report: ProximityReport): string {
   const hasAReading =
-    assessment.distanceMeters !== null &&
-    assessment.effectiveUncertaintyMeters !== null &&
-    assessment.locationAgeMs !== null;
+    report.distanceMeters !== null &&
+    report.effectiveUncertaintyMeters !== null &&
+    report.locationAgeMs !== null;
   if (!hasAReading) {
-    return `Status ${assessment.status}.`;
+    return `Status ${report.status}.`;
   }
   return (
-    `Reading ${WHERE_THE_READING_CAME_FROM[assessment.source]}, ` +
-    `${seconds(assessment.locationAgeMs ?? 0)} old: ` +
-    `${meters(assessment.distanceMeters ?? 0)} from the address, and the ` +
+    `Reading ${WHERE_THE_READING_CAME_FROM[report.source]}, ` +
+    `${seconds(report.locationAgeMs ?? 0)} old: ` +
+    `${meters(report.distanceMeters ?? 0)} from the address, and the ` +
     `phone could be up to ` +
-    `${meters(assessment.effectiveUncertaintyMeters ?? 0)} from it. ` +
-    `Status ${assessment.status}.`
+    `${meters(report.effectiveUncertaintyMeters ?? 0)} from it. ` +
+    `Status ${report.status}.`
   );
 }
 
@@ -129,11 +129,11 @@ function theFacts(assessment: Assessment): string {
  * The index on a ruler from 0 to 100. The filled part is the index. When
  * the score model lowered it, a notch marks where it was before the limits.
  */
-function IndexRuler({ assessment }: { assessment: Assessment }) {
-  const index = assessment.qualityScore;
-  const beforeLimits = assessment.scoreBreakdown?.rawScore ?? index;
+function IndexRuler({ report }: { report: ProximityReport }) {
+  const index = report.qualityScore;
+  const beforeLimits = report.scoreBreakdown?.rawScore ?? index;
   const wasLowered = beforeLimits > index;
-  const limits = assessment.scoreBreakdown?.appliedCaps ?? [];
+  const limits = report.scoreBreakdown?.appliedCaps ?? [];
 
   return (
     <View
@@ -169,7 +169,7 @@ function IndexRuler({ assessment }: { assessment: Assessment }) {
 }
 
 /** The earlier answers as bars: height is the index, color is the side. */
-function AnswerStrip({ answers }: { answers: readonly Assessment[] }) {
+function AnswerStrip({ answers }: { answers: readonly ProximityReport[] }) {
   return (
     <View
       style={styles.strip}
@@ -192,16 +192,16 @@ function AnswerStrip({ answers }: { answers: readonly Assessment[] }) {
   );
 }
 
-export function AssessmentPanel({ assessment, answers, whenEmpty }: Props) {
-  if (assessment === null) {
+export function ReportPanel({ report, answers, whenEmpty }: Props) {
+  if (report === null) {
     return <Text style={styles.empty}>{whenEmpty}</Text>;
   }
 
-  const reasons = assessment.diagnostics.reasonCodes;
+  const reasons = report.diagnostics.reasonCodes;
 
   return (
     <View>
-      <IndexRuler assessment={assessment} />
+      <IndexRuler report={report} />
       {answers !== undefined && answers.length > 1 && (
         <AnswerStrip answers={answers} />
       )}
@@ -209,13 +209,13 @@ export function AssessmentPanel({ assessment, answers, whenEmpty }: Props) {
       <Text
         style={[
           styles.verdict,
-          { color: colorOfRelation(assessment.evidenceRelation) },
+          { color: colorOfRelation(report.evidenceRelation) },
         ]}
       >
-        {whatTheEvidenceSays(assessment)}
+        {whatTheEvidenceSays(report)}
       </Text>
-      <Text style={styles.why}>{whyInPlainWords(assessment)}</Text>
-      <Text style={styles.facts}>{theFacts(assessment)}</Text>
+      <Text style={styles.why}>{whyInPlainWords(report)}</Text>
+      <Text style={styles.facts}>{theFacts(report)}</Text>
 
       <View style={styles.reasons}>
         {reasons.map((reason) => (

@@ -10,7 +10,7 @@
  */
 import { LocationConfidenceError, NativeModuleError } from './errors';
 import type {
-  NativeAssessment,
+  NativeReport,
   NativeAuthorization,
   NativeCapabilities,
   NativeSessionResult,
@@ -18,8 +18,8 @@ import type {
 import type {
   AccuracyAuthorization,
   AgeReliability,
-  Assessment,
-  AssessmentStatus,
+  ProximityReport,
+  ReportStatus,
   Authorization,
   Capabilities,
   EvidenceRelation,
@@ -42,7 +42,7 @@ export const ENGINE_VERSION_THIS_CODE_EXPECTS = 2;
  * The engine names each choice with a number (the LCE_* lists of lce.h).
  * The position in each list IS the number: STATUS_TEXTS[1] is 'degraded'.
  */
-const STATUS_TEXTS: readonly AssessmentStatus[] = [
+const STATUS_TEXTS: readonly ReportStatus[] = [
   'available',
   'degraded',
   'unavailable',
@@ -145,11 +145,11 @@ function oneOf<T extends string>(
   return found;
 }
 
-/** The final report of one evaluation, in its public shape. */
-export function toAssessment(
+/** The final report of one request, in its public shape. */
+export function toProximityReport(
   requestId: string,
-  native: NativeAssessment
-): Assessment {
+  native: NativeReport
+): ProximityReport {
   const versionMatches =
     native.transportVersion === ENGINE_VERSION_THIS_CODE_EXPECTS;
   if (!versionMatches) {
@@ -250,15 +250,15 @@ export function toAssessment(
 }
 
 /**
- * The report of an evaluation that was cancelled before it started: the
+ * The report of a request that was cancelled before it started: the
  * AbortSignal was already aborted. It is made here, in JavaScript, and the
  * native side is never called, so no sensor is turned on.
  */
-export function assessmentCancelledBeforeItStarted(
+export function reportCancelledBeforeItStarted(
   requestId: string,
   sessionId: string | null,
   radiusMeters: number
-): Assessment {
+): ProximityReport {
   return {
     schemaVersion: 1,
     scoreModelVersion: 'heuristic-v1',

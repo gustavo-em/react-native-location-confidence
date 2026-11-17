@@ -2,23 +2,23 @@
  * A native module made of plain JavaScript, for the tests.
  *
  * It writes down every call it receives, so a test can say "nothing native
- * was called". An evaluation stays open until the test finishes it, the
+ * was called". A request stays open until the test finishes it, the
  * same way a real one stays open while the GPS is working.
  */
 import type { NativePort } from '../LocationConfidence';
 import type {
-  NativeAssessment,
+  NativeReport,
   NativeAuthorization,
   NativeCapabilities,
-  NativeEvaluateRequest,
+  NativeRequest,
   NativeSessionOptions,
   NativeSessionResult,
   NativeSimulatedReading,
 } from '../NativeLocationConfidence';
 
-type OpenEvaluation = {
-  request: NativeEvaluateRequest;
-  resolve: (answer: NativeAssessment) => void;
+type OpenRequest = {
+  request: NativeRequest;
+  resolve: (answer: NativeReport) => void;
   reject: (error: unknown) => void;
 };
 
@@ -34,7 +34,7 @@ const TWENTY_METERS_NORTH_IN_DEGREES = (20 * 180) / (Math.PI * 6371008.8);
  * They are checked in C++ (cpp/tests/TestFacade.cpp) and in Kotlin
  * (CoreEngineTest.kt); here they only have to cross the mapper unchanged.
  */
-export function goldenNativeAssessment(): NativeAssessment {
+export function goldenNativeReport(): NativeReport {
   return {
     transportVersion: 2,
     sessionId: null,
@@ -79,10 +79,10 @@ export function goldenNativeAssessment(): NativeAssessment {
   };
 }
 
-/** What the native side sends when an evaluation is cancelled. */
-export function cancelledNativeAssessment(): NativeAssessment {
+/** What the native side sends when a request is cancelled. */
+export function cancelledNativeReport(): NativeReport {
   return {
-    ...goldenNativeAssessment(),
+    ...goldenNativeReport(),
     status: 3,
     source: 3,
     hasPosition: false,
@@ -114,7 +114,7 @@ export class FakeNative implements NativePort {
   /** The name of every native function that was called, in order. */
   calls: string[] = [];
 
-  openEvaluations = new Map<string, OpenEvaluation>();
+  openRequests = new Map<string, OpenRequest>();
   cancelledRequestIds: string[] = [];
   sessionOptionsReceived: NativeSessionOptions[] = [];
   readingsReceived: NativeSimulatedReading[][] = [];
@@ -192,8 +192,8 @@ export class FakeNative implements NativePort {
     return this.answer('stopSession', undefined);
   }
 
-  evaluate(requestId: string, request: NativeEvaluateRequest) {
-    this.calls.push('evaluate');
+  getReport(requestId: string, request: NativeRequest) {
+    this.calls.push('getReport');
     if (this.nextRejection !== null) {
       const rejection = Object.assign(
         new Error(this.nextRejection.message),
@@ -202,8 +202,8 @@ export class FakeNative implements NativePort {
       this.nextRejection = null;
       return Promise.reject(rejection);
     }
-    return new Promise<NativeAssessment>((resolve, reject) => {
-      this.openEvaluations.set(requestId, { request, resolve, reject });
+    return new Promise<NativeReport>((resolve, reject) => {
+      this.openRequests.set(requestId, { request, resolve, reject });
     });
   }
 
@@ -227,22 +227,22 @@ export class FakeNative implements NativePort {
     return this.answer('simulatePhoneActivity', undefined);
   }
 
-  /** The id of the only evaluation that is open right now. */
+  /** The id of the only request that is open right now. */
   onlyOpenRequestId(): string {
-    const ids = [...this.openEvaluations.keys()];
+    const ids = [...this.openRequests.keys()];
     if (ids.length !== 1) {
-      throw new Error(`expected 1 open evaluation, there are ${ids.length}`);
+      throw new Error(`expected 1 open request, there are ${ids.length}`);
     }
     return ids[0] as string;
   }
 
-  /** The native side finishes an evaluation with this report. */
-  finish(requestId: string, answer: NativeAssessment): void {
-    const open = this.openEvaluations.get(requestId);
+  /** The native side finishes a request with this report. */
+  finish(requestId: string, answer: NativeReport): void {
+    const open = this.openRequests.get(requestId);
     if (open === undefined) {
-      throw new Error(`no open evaluation called ${requestId}`);
+      throw new Error(`no open request called ${requestId}`);
     }
-    this.openEvaluations.delete(requestId);
+    this.openRequests.delete(requestId);
     open.resolve(answer);
   }
 }

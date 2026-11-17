@@ -169,7 +169,7 @@ class LocationConfidenceModule(reactContext: ReactApplicationContext) :
   /**
    * Shows Android's permission dialog. This is the ONLY place where the
    * library asks the user for something, and it only runs when the app calls
-   * it. Opening a session or evaluating never asks.
+   * it. Opening a session or starting a request never asks.
    */
   override fun requestLocationPermission(promise: Promise) {
     UiThreadUtil.runOnUiThread {
@@ -252,7 +252,7 @@ class LocationConfidenceModule(reactContext: ReactApplicationContext) :
 
   // --- Requests -----------------------------------------------------------
 
-  override fun evaluate(requestId: String, request: ReadableMap, promise: Promise) {
+  override fun getReport(requestId: String, request: ReadableMap, promise: Promise) {
     val coordinator = coordinatorOrReject(promise) ?: return
 
     val sessionIdFromTheApp: String? =
@@ -369,7 +369,7 @@ class LocationConfidenceModule(reactContext: ReactApplicationContext) :
   private fun toArray(texts: List<String>): WritableArray =
     Arguments.createArray().apply { texts.forEach { pushString(it) } }
 
-  /** The report as the flat object described by NativeAssessment in the TypeScript spec. */
+  /** The report as the flat object described by NativeReport in the TypeScript spec. */
   private fun toMap(report: Report, sessionIdFromTheApp: String?): WritableMap =
     Arguments.createMap().apply {
       putDouble("transportVersion", (NativeCore.abiVersionOrNull() ?: 0).toDouble())

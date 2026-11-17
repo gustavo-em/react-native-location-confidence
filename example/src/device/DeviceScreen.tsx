@@ -11,12 +11,12 @@ import {
 import {
   InvalidArgumentError,
   LocationConfidence,
-  type Assessment,
+  type ProximityReport,
   type Authorization,
   type Capabilities,
   type Session,
 } from 'react-native-location-confidence';
-import { AssessmentPanel } from '../components/AssessmentPanel';
+import { ReportPanel } from '../components/ReportPanel';
 import { ADDRESS } from '../simulator/world';
 import { colors, fonts } from '../theme';
 
@@ -78,12 +78,12 @@ export function DeviceScreen() {
   const [latitude, setLatitude] = useState(String(ADDRESS.latitude));
   const [longitude, setLongitude] = useState(String(ADDRESS.longitude));
   const [radius, setRadius] = useState('100');
-  const [assessment, setAssessment] = useState<Assessment | null>(null);
+  const [report, setReport] = useState<ProximityReport | null>(null);
   const [showFullReport, setShowFullReport] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
-  const [isEvaluating, setIsEvaluating] = useState(false);
+  const [isWaitingForTheReport, setIsWaitingForTheReport] = useState(false);
 
-  const evaluationInProgress = useRef<AbortController | null>(null);
+  const requestInProgress = useRef<AbortController | null>(null);
   const openSessionId = useRef<string | null>(null);
 
   const showProblem = useCallback((error: unknown) => {
@@ -107,8 +107,8 @@ export function DeviceScreen() {
   useEffect(() => {
     readThePhone();
     return () => {
-      // Leaving the screen: stop the evaluation and close the session.
-      evaluationInProgress.current?.abort();
+      // Leaving the screen: stop the request and close the session.
+      requestInProgress.current?.abort();
       if (openSessionId.current !== null) {
         LocationConfidence.stopSession(openSessionId.current).catch(() => {});
       }
@@ -131,7 +131,7 @@ export function DeviceScreen() {
       const opened = await LocationConfidence.startSession({
         collectionMode: keepCollecting
           ? 'foreground_monitoring'
-          : 'evaluations_only',
+          : 'requests_only',
       });
       openSessionId.current = opened.id;
       setSession(opened);
@@ -153,13 +153,13 @@ export function DeviceScreen() {
     }
   }
 
-  async function evaluate() {
+  async function getReport() {
     setProblem(null);
-    setIsEvaluating(true);
+    setIsWaitingForTheReport(true);
     const abort = new AbortController();
-    evaluationInProgress.current = abort;
+    requestInProgress.current = abort;
     try {
-      const report = await LocationConfidence.evaluateProximity({
+      const received = await LocationConfidence.getProximityReport({
         sessionId: openSessionId.current ?? undefined,
         destination: {
           latitude: numberTyped(latitude),
@@ -168,17 +168,17 @@ export function DeviceScreen() {
         radiusMeters: numberTyped(radius),
         signal: abort.signal,
       });
-      setAssessment(report);
+      setReport(received);
     } catch (error) {
       showProblem(error);
     } finally {
-      evaluationInProgress.current = null;
-      setIsEvaluating(false);
+      requestInProgress.current = null;
+      setIsWaitingForTheReport(false);
     }
   }
 
   function useTheLastReadingAsTheAddress() {
-    const position = assessment?.measuredPosition;
+    const position = report?.measuredPosition;
     if (position != null) {
       setLatitude(position.latitude.toFixed(6));
       setLongitude(position.longitude.toFixed(6));
@@ -224,8 +224,8 @@ export function DeviceScreen() {
 
       <Text style={styles.heading}>Session</Text>
       <Text style={styles.explanation}>
-        A session remembers the last readings, so an evaluation can still answer
-        when the GPS is slow. Without one, each evaluation starts from nothing.
+        A session remembers the last readings, so a request can still answer
+        when the GPS is slow. Without one, each request starts from nothing.
       </Text>
       {session === null ? (
         <>
@@ -292,18 +292,22 @@ export function DeviceScreen() {
       <Button
         title="Use the last reading as the address"
         onPress={useTheLastReadingAsTheAddress}
-        disabled={assessment?.measuredPosition == null}
+        disabled={report?.measuredPosition == null}
       />
 
       <View style={styles.actions}>
         <View style={styles.action}>
-          <Button title="Evaluate" onPress={evaluate} disabled={isEvaluating} />
+          <Button
+            title="Evaluate"
+            onPress={getReport}
+            disabled={isWaitingForTheReport}
+          />
         </View>
         <View style={styles.action}>
           <Button
             title="Cancel"
-            onPress={() => evaluationInProgress.current?.abort()}
-            disabled={!isEvaluating}
+            onPress={() => requestInProgress.current?.abort()}
+            disabled={!isWaitingForTheReport}
           />
         </View>
       </View>
@@ -311,10 +315,10 @@ export function DeviceScreen() {
       {problem !== null && <Text style={styles.problem}>{problem}</Text>}
 
       <View style={styles.result}>
-        <AssessmentPanel
-          assessment={assessment}
+        <ReportPanel
+          report={report}
           whenEmpty={
-            isEvaluating
+            isWaitingForTheReport
               ? 'Waiting for the GPS...'
               : 'Nothing evaluated yet. "Evaluate" turns the GPS on for a ' +
                 'few seconds and reports how good the evidence is.'
@@ -322,7 +326,7 @@ export function DeviceScreen() {
         />
       </View>
 
-      {assessment !== null && (
+      {report !== null && (
         <>
           <Button
             title={
@@ -332,7 +336,7 @@ export function DeviceScreen() {
           />
           {showFullReport && (
             <Text style={styles.fullReport} selectable>
-              {JSON.stringify(assessment, null, 2)}
+              {JSON.stringify(report, null, 2)}
             </Text>
           )}
         </>

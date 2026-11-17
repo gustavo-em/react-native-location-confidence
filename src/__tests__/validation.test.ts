@@ -1,16 +1,16 @@
 import { describe, expect, it } from '@jest/globals';
 import { InvalidArgumentError } from '../errors';
-import type { EvaluateRequest, SessionOptions } from '../types';
+import type { ProximityRequest, SessionOptions } from '../types';
 import {
   LIMITS,
-  checkEvaluateRequest,
+  checkProximityRequest,
   checkSessionOptions,
   checkSimulatedReadings,
 } from '../validation';
 
 const destination = { latitude: -20.8117, longitude: -49.3768 };
 
-function request(changes: Partial<EvaluateRequest> = {}): EvaluateRequest {
+function request(changes: Partial<ProximityRequest> = {}): ProximityRequest {
   return { destination, radiusMeters: 100, ...changes };
 }
 
@@ -30,7 +30,7 @@ function argumentRefusedBy(action: () => unknown): string {
 describe('the destination', () => {
   it('GEO-012 refuses a latitude just above 90', () => {
     const refused = argumentRefusedBy(() =>
-      checkEvaluateRequest(
+      checkProximityRequest(
         request({ destination: { latitude: 90.00001, longitude: 0 } })
       )
     );
@@ -39,7 +39,7 @@ describe('the destination', () => {
 
   it('GEO-013 refuses a longitude just above 180', () => {
     const refused = argumentRefusedBy(() =>
-      checkEvaluateRequest(
+      checkProximityRequest(
         request({ destination: { latitude: 0, longitude: 180.00001 } })
       )
     );
@@ -48,7 +48,7 @@ describe('the destination', () => {
 
   it('GEO-014 refuses a latitude that is not a number', () => {
     const refused = argumentRefusedBy(() =>
-      checkEvaluateRequest(
+      checkProximityRequest(
         request({ destination: { latitude: NaN, longitude: 0 } })
       )
     );
@@ -56,10 +56,10 @@ describe('the destination', () => {
   });
 
   it('accepts the poles and the date line themselves', () => {
-    const north = checkEvaluateRequest(
+    const north = checkProximityRequest(
       request({ destination: { latitude: 90, longitude: 180 } })
     );
-    const south = checkEvaluateRequest(
+    const south = checkProximityRequest(
       request({ destination: { latitude: -90, longitude: -180 } })
     );
     expect([north.latitude, north.longitude]).toEqual([90, 180]);
@@ -67,7 +67,7 @@ describe('the destination', () => {
   });
 
   it('GEO-026 takes negative zero as plain zero', () => {
-    const checked = checkEvaluateRequest(
+    const checked = checkProximityRequest(
       request({ destination: { latitude: -0, longitude: -0 } })
     );
     expect(Object.is(checked.latitude, 0)).toBe(true);
@@ -75,22 +75,22 @@ describe('the destination', () => {
   });
 
   it('accepts the point (0, 0): it is a real place, not a missing value', () => {
-    const checked = checkEvaluateRequest(
+    const checked = checkProximityRequest(
       request({ destination: { latitude: 0, longitude: 0 } })
     );
     expect([checked.latitude, checked.longitude]).toEqual([0, 0]);
   });
 
   it('refuses a destination that is missing or has texts for numbers', () => {
-    const missing = { radiusMeters: 100 } as unknown as EvaluateRequest;
-    expect(argumentRefusedBy(() => checkEvaluateRequest(missing))).toBe(
+    const missing = { radiusMeters: 100 } as unknown as ProximityRequest;
+    expect(argumentRefusedBy(() => checkProximityRequest(missing))).toBe(
       'request.destination'
     );
 
     const withTexts = request({
       destination: { latitude: '10', longitude: 0 } as never,
     });
-    expect(argumentRefusedBy(() => checkEvaluateRequest(withTexts))).toBe(
+    expect(argumentRefusedBy(() => checkProximityRequest(withTexts))).toBe(
       'destination.latitude'
     );
   });
@@ -100,7 +100,7 @@ describe('the radius', () => {
   it('GEO-015 refuses an infinite radius', () => {
     expect(
       argumentRefusedBy(() =>
-        checkEvaluateRequest(request({ radiusMeters: Infinity }))
+        checkProximityRequest(request({ radiusMeters: Infinity }))
       )
     ).toBe('radiusMeters');
   });
@@ -108,7 +108,7 @@ describe('the radius', () => {
   it('GEO-016 refuses a radius of zero', () => {
     expect(
       argumentRefusedBy(() =>
-        checkEvaluateRequest(request({ radiusMeters: 0 }))
+        checkProximityRequest(request({ radiusMeters: 0 }))
       )
     ).toBe('radiusMeters');
   });
@@ -116,35 +116,35 @@ describe('the radius', () => {
   it('GEO-017 refuses a negative radius', () => {
     expect(
       argumentRefusedBy(() =>
-        checkEvaluateRequest(request({ radiusMeters: -1 }))
+        checkProximityRequest(request({ radiusMeters: -1 }))
       )
     ).toBe('radiusMeters');
   });
 
   it('GEO-018 accepts a radius of exactly 100000 m', () => {
     expect(
-      checkEvaluateRequest(request({ radiusMeters: 100000 })).radiusMeters
+      checkProximityRequest(request({ radiusMeters: 100000 })).radiusMeters
     ).toBe(100000);
   });
 
   it('GEO-019 refuses a radius of 100001 m', () => {
     expect(
       argumentRefusedBy(() =>
-        checkEvaluateRequest(request({ radiusMeters: 100001 }))
+        checkProximityRequest(request({ radiusMeters: 100001 }))
       )
     ).toBe('radiusMeters');
   });
 
   it('accepts a radius smaller than one meter', () => {
     expect(
-      checkEvaluateRequest(request({ radiusMeters: 0.5 })).radiusMeters
+      checkProximityRequest(request({ radiusMeters: 0.5 })).radiusMeters
     ).toBe(0.5);
   });
 });
 
-describe('the options of an evaluation', () => {
+describe('the options of a request', () => {
   it('fills in every default', () => {
-    expect(checkEvaluateRequest(request())).toEqual({
+    expect(checkProximityRequest(request())).toEqual({
       sessionId: null,
       latitude: -20.8117,
       longitude: -49.3768,
@@ -163,7 +163,7 @@ describe('the options of an evaluation', () => {
   });
 
   it('keeps what the app chose', () => {
-    const checked = checkEvaluateRequest(
+    const checked = checkProximityRequest(
       request({
         sessionId: '3',
         options: {
@@ -195,13 +195,13 @@ describe('the options of an evaluation', () => {
     });
   });
 
-  it('never lets the first attempt be longer than the whole evaluation', () => {
-    const checked = checkEvaluateRequest(
+  it('never lets the first attempt be longer than the whole request', () => {
+    const checked = checkProximityRequest(
       request({ options: { totalDeadlineMs: 2000, initialFixBudgetMs: 4500 } })
     );
     expect(checked.initialFixBudgetMs).toBe(2000);
 
-    const withDefaults = checkEvaluateRequest(
+    const withDefaults = checkProximityRequest(
       request({ options: { totalDeadlineMs: 1000 } })
     );
     expect(withDefaults.initialFixBudgetMs).toBe(1000);
@@ -211,18 +211,18 @@ describe('the options of an evaluation', () => {
     const shortest = LIMITS.totalDeadlineMs.min;
     const longest = LIMITS.totalDeadlineMs.max;
     expect(
-      checkEvaluateRequest(request({ options: { totalDeadlineMs: shortest } }))
+      checkProximityRequest(request({ options: { totalDeadlineMs: shortest } }))
         .totalDeadlineMs
     ).toBe(1000);
     expect(
-      checkEvaluateRequest(request({ options: { totalDeadlineMs: longest } }))
+      checkProximityRequest(request({ options: { totalDeadlineMs: longest } }))
         .totalDeadlineMs
     ).toBe(60000);
 
     for (const totalDeadlineMs of [999, 60001, 1500.5, NaN, Infinity]) {
       expect(
         argumentRefusedBy(() =>
-          checkEvaluateRequest(request({ options: { totalDeadlineMs } }))
+          checkProximityRequest(request({ options: { totalDeadlineMs } }))
         )
       ).toBe('options.totalDeadlineMs');
     }
@@ -232,12 +232,12 @@ describe('the options of an evaluation', () => {
     for (const recoveryWindowMs of [-1, 20001, 0.5]) {
       expect(
         argumentRefusedBy(() =>
-          checkEvaluateRequest(request({ options: { recoveryWindowMs } }))
+          checkProximityRequest(request({ options: { recoveryWindowMs } }))
         )
       ).toBe('options.recoveryWindowMs');
     }
     expect(
-      checkEvaluateRequest(request({ options: { recoveryWindowMs: 20000 } }))
+      checkProximityRequest(request({ options: { recoveryWindowMs: 20000 } }))
         .recoveryWindowMs
     ).toBe(20000);
   });
@@ -245,7 +245,7 @@ describe('the options of an evaluation', () => {
   it('refuses a negative first attempt', () => {
     expect(
       argumentRefusedBy(() =>
-        checkEvaluateRequest(request({ options: { initialFixBudgetMs: -1 } }))
+        checkProximityRequest(request({ options: { initialFixBudgetMs: -1 } }))
       )
     ).toBe('options.initialFixBudgetMs');
   });
@@ -253,13 +253,13 @@ describe('the options of an evaluation', () => {
   it('refuses an oldest age that is smaller than the fresh age', () => {
     expect(
       argumentRefusedBy(() =>
-        checkEvaluateRequest(
+        checkProximityRequest(
           request({ options: { maxFreshAgeMs: 10000, maxFallbackAgeMs: 9999 } })
         )
       )
     ).toBe('options.maxFallbackAgeMs');
 
-    const equal = checkEvaluateRequest(
+    const equal = checkProximityRequest(
       request({ options: { maxFreshAgeMs: 10000, maxFallbackAgeMs: 10000 } })
     );
     expect(equal.maxFallbackAgeMs).toBe(10000);
@@ -268,12 +268,14 @@ describe('the options of an evaluation', () => {
   it('refuses ages that are negative or beyond what the engine remembers', () => {
     expect(
       argumentRefusedBy(() =>
-        checkEvaluateRequest(request({ options: { maxFreshAgeMs: -1 } }))
+        checkProximityRequest(request({ options: { maxFreshAgeMs: -1 } }))
       )
     ).toBe('options.maxFreshAgeMs');
     expect(
       argumentRefusedBy(() =>
-        checkEvaluateRequest(request({ options: { maxFallbackAgeMs: 120001 } }))
+        checkProximityRequest(
+          request({ options: { maxFallbackAgeMs: 120001 } })
+        )
       )
     ).toBe('options.maxFallbackAgeMs');
   });
@@ -282,7 +284,7 @@ describe('the options of an evaluation', () => {
     for (const maxHorizontalAccuracyMeters of [0, -5, NaN]) {
       expect(
         argumentRefusedBy(() =>
-          checkEvaluateRequest(
+          checkProximityRequest(
             request({ options: { maxHorizontalAccuracyMeters } })
           )
         )
@@ -291,7 +293,7 @@ describe('the options of an evaluation', () => {
     for (const maxPlausibleSpeedMps of [0, -1, Infinity]) {
       expect(
         argumentRefusedBy(() =>
-          checkEvaluateRequest(request({ options: { maxPlausibleSpeedMps } }))
+          checkProximityRequest(request({ options: { maxPlausibleSpeedMps } }))
         )
       ).toBe('options.maxPlausibleSpeedMps');
     }
@@ -300,48 +302,48 @@ describe('the options of an evaluation', () => {
   it('refuses values of the wrong type', () => {
     expect(
       argumentRefusedBy(() =>
-        checkEvaluateRequest(
+        checkProximityRequest(
           request({ options: { totalDeadlineMs: '12000' as never } })
         )
       )
     ).toBe('options.totalDeadlineMs');
     expect(
       argumentRefusedBy(() =>
-        checkEvaluateRequest(
+        checkProximityRequest(
           request({ options: { enableMotionAssistance: 'yes' as never } })
         )
       )
     ).toBe('options.enableMotionAssistance');
     expect(
       argumentRefusedBy(() =>
-        checkEvaluateRequest(
+        checkProximityRequest(
           request({ options: { mockLocationPolicy: 'ignore' as never } })
         )
       )
     ).toBe('options.mockLocationPolicy');
     expect(
       argumentRefusedBy(() =>
-        checkEvaluateRequest(request({ options: 'fast' as never }))
+        checkProximityRequest(request({ options: 'fast' as never }))
       )
     ).toBe('options');
   });
 
   it('refuses a session id that is not a non-empty text', () => {
     expect(
-      argumentRefusedBy(() => checkEvaluateRequest(request({ sessionId: '' })))
+      argumentRefusedBy(() => checkProximityRequest(request({ sessionId: '' })))
     ).toBe('sessionId');
     expect(
       argumentRefusedBy(() =>
-        checkEvaluateRequest(request({ sessionId: 7 as never }))
+        checkProximityRequest(request({ sessionId: 7 as never }))
       )
     ).toBe('sessionId');
   });
 
   it('refuses a request that is not an object', () => {
     expect(
-      argumentRefusedBy(() => checkEvaluateRequest(undefined as never))
+      argumentRefusedBy(() => checkProximityRequest(undefined as never))
     ).toBe('request');
-    expect(argumentRefusedBy(() => checkEvaluateRequest(null as never))).toBe(
+    expect(argumentRefusedBy(() => checkProximityRequest(null as never))).toBe(
       'request'
     );
   });

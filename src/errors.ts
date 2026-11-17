@@ -3,7 +3,7 @@
  *
  * Only programming mistakes and a broken installation are thrown. Things
  * that simply happen (no permission, GPS turned off, timeout, cancel) are
- * NOT errors: they come back as an assessment with a `status` and
+ * NOT errors: they come back as a report with a `status` and
  * `reasonCodes`.
  */
 

@@ -119,8 +119,8 @@ static void (^rejecter(RCTPromiseRejectBlock reject))(NSString *, NSString *)
 
 // --- Requests ----------------------------------------------------------------
 
-- (void)evaluate:(NSString *)requestId
-         request:(JS::NativeLocationConfidence::NativeEvaluateRequest &)request
+- (void)getReport:(NSString *)requestId
+         request:(JS::NativeLocationConfidence::NativeRequest &)request
          resolve:(RCTPromiseResolveBlock)resolve
           reject:(RCTPromiseRejectBlock)reject
 {
@@ -143,7 +143,7 @@ static void (^rejecter(RCTPromiseRejectBlock reject))(NSString *, NSString *)
     @"zeroScoreForMockLocation" : @(request.zeroScoreForMockLocation()),
   };
 
-  [_bridge evaluate:requestId request:fields resolve:resolve reject:rejecter(reject)];
+  [_bridge getReport:requestId request:fields resolve:resolve reject:rejecter(reject)];
 }
 
 - (void)cancelRequest:(NSString *)requestId

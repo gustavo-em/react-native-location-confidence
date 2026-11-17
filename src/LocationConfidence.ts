@@ -23,22 +23,22 @@ import {
 import {
   MOTION_CONFIDENCE_TEXTS,
   MOTION_STATE_TEXTS,
-  assessmentCancelledBeforeItStarted,
-  toAssessment,
+  reportCancelledBeforeItStarted,
+  toProximityReport,
   toAuthorization,
   toCapabilities,
   toSession,
 } from './mapper';
 import type { Spec } from './NativeLocationConfidence';
 import type {
-  Assessment,
-  EvaluateRequest,
+  ProximityReport,
+  ProximityRequest,
   LocationConfidenceApi,
   SessionOptions,
   SimulatedReading,
 } from './types';
 import {
-  checkEvaluateRequest,
+  checkProximityRequest,
   checkSessionOptions,
   checkSimulatedReadings,
   requireSessionId,
@@ -80,8 +80,8 @@ function toLibraryError(thrown: unknown): Error {
 let howManyRequestIdsWereMade = 0;
 
 /**
- * A name for one evaluation, for example "lc-1-k3f9x2". It only has to be
- * different from the other evaluations that are running, so that cancelling
+ * A name for one request, for example "lc-1-k3f9x2". It only has to be
+ * different from the other requests that are running, so that cancelling
  * one never cancels another.
  */
 function makeRequestId(): string {
@@ -129,17 +129,17 @@ export function createLocationConfidence(
     }
   }
 
-  async function evaluateProximity(
-    request: EvaluateRequest
-  ): Promise<Assessment> {
+  async function getProximityReport(
+    request: ProximityRequest
+  ): Promise<ProximityReport> {
     // 1. Check everything first. A broken request never reaches the GPS.
-    const nativeRequest = checkEvaluateRequest(request);
+    const nativeRequest = checkProximityRequest(request);
     const signal = checkSignal(request.signal);
     const requestId = makeRequestId();
 
     // 2. Cancelled before it started: answer here, call nothing native.
     if (signal !== undefined && signal.aborted) {
-      return assessmentCancelledBeforeItStarted(
+      return reportCancelledBeforeItStarted(
         requestId,
         nativeRequest.sessionId,
         nativeRequest.radiusMeters
@@ -147,14 +147,14 @@ export function createLocationConfidence(
     }
 
     // 3. Run it. If the app aborts in the middle, the native side is told
-    //    and it finishes the evaluation with status 'cancelled'. The answer
+    //    and it finishes the request with status 'cancelled'. The answer
     //    still comes through the same Promise, exactly once.
     const native = getNative();
     const cancelOnTheNativeSide = () => native.cancelRequest(requestId);
     signal?.addEventListener('abort', cancelOnTheNativeSide);
     try {
-      const nativeAssessment = await native.evaluate(requestId, nativeRequest);
-      return toAssessment(requestId, nativeAssessment);
+      const nativeReport = await native.getReport(requestId, nativeRequest);
+      return toProximityReport(requestId, nativeReport);
     } catch (thrown) {
       throw toLibraryError(thrown);
     } finally {
@@ -205,9 +205,9 @@ export function createLocationConfidence(
       await callNative((native) => native.stopSession(id));
     },
 
-    async evaluateProximity(request: EvaluateRequest) {
+    async getProximityReport(request: ProximityRequest) {
       try {
-        return await evaluateProximity(request);
+        return await getProximityReport(request);
       } catch (thrown) {
         throw toLibraryError(thrown);
       }

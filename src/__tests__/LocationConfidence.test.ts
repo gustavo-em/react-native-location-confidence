@@ -5,11 +5,11 @@ import {
   NativeModuleError,
 } from '../errors';
 import { createLocationConfidence } from '../LocationConfidence';
-import type { EvaluateRequest, LocationConfidenceApi } from '../types';
+import type { ProximityRequest, LocationConfidenceApi } from '../types';
 import {
   FakeNative,
-  cancelledNativeAssessment,
-  goldenNativeAssessment,
+  cancelledNativeReport,
+  goldenNativeReport,
   letPromisesSettle,
 } from './FakeNative';
 
@@ -21,7 +21,7 @@ beforeEach(() => {
   library = createLocationConfidence(() => native);
 });
 
-function request(changes: Partial<EvaluateRequest> = {}): EvaluateRequest {
+function request(changes: Partial<ProximityRequest> = {}): ProximityRequest {
   return {
     destination: { latitude: 0, longitude: 0 },
     radiusMeters: 100,
@@ -63,43 +63,43 @@ class CountingSignal {
   }
 }
 
-describe('evaluateProximity', () => {
+describe('getProximityReport', () => {
   it('sends the checked request and returns the report in its public shape', async () => {
-    const pending = library.evaluateProximity(
+    const pending = library.getProximityReport(
       request({ sessionId: '1', options: { totalDeadlineMs: 8000 } })
     );
     await letPromisesSettle();
 
     const requestId = native.onlyOpenRequestId();
-    const sent = native.openEvaluations.get(requestId)?.request;
+    const sent = native.openRequests.get(requestId)?.request;
     expect(sent?.sessionId).toBe('1');
     expect(sent?.totalDeadlineMs).toBe(8000);
     expect(sent?.initialFixBudgetMs).toBe(4500);
 
-    native.finish(requestId, { ...goldenNativeAssessment(), sessionId: '1' });
-    const assessment = await pending;
+    native.finish(requestId, { ...goldenNativeReport(), sessionId: '1' });
+    const report = await pending;
 
-    expect(assessment.requestId).toBe(requestId);
-    expect(assessment.sessionId).toBe('1');
-    expect(assessment.status).toBe('available');
-    expect(assessment.qualityScore).toBe(75);
-    expect(assessment.evidenceRelation).toBe('supports_inside');
-    expect(native.calls).toEqual(['evaluate']);
+    expect(report.requestId).toBe(requestId);
+    expect(report.sessionId).toBe('1');
+    expect(report.status).toBe('available');
+    expect(report.qualityScore).toBe(75);
+    expect(report.evidenceRelation).toBe('supports_inside');
+    expect(native.calls).toEqual(['getReport']);
   });
 
-  it('gives each evaluation a name of its own', async () => {
-    const first = library.evaluateProximity(request());
-    const second = library.evaluateProximity(request({ radiusMeters: 50 }));
+  it('gives each request a name of its own', async () => {
+    const first = library.getProximityReport(request());
+    const second = library.getProximityReport(request({ radiusMeters: 50 }));
     await letPromisesSettle();
 
-    const ids = [...native.openEvaluations.keys()];
+    const ids = [...native.openRequests.keys()];
     expect(ids).toHaveLength(2);
     expect(ids[0]).not.toBe(ids[1]);
 
-    // CON-012: each answer goes to the evaluation that asked for it.
+    // CON-012: each answer goes to the request that asked for it.
     const [firstId, secondId] = ids as [string, string];
-    native.finish(secondId, { ...goldenNativeAssessment(), radiusMeters: 50 });
-    native.finish(firstId, goldenNativeAssessment());
+    native.finish(secondId, { ...goldenNativeReport(), radiusMeters: 50 });
+    native.finish(firstId, goldenNativeReport());
     expect((await first).radiusMeters).toBe(100);
     expect((await second).radiusMeters).toBe(50);
     expect((await first).requestId).toBe(firstId);
@@ -120,7 +120,7 @@ describe('evaluateProximity', () => {
     ];
 
     for (const broken of brokenRequests) {
-      const error = await errorOf(library.evaluateProximity(broken));
+      const error = await errorOf(library.getProximityReport(broken));
       expect(error).toBeInstanceOf(InvalidArgumentError);
       expect((error as InvalidArgumentError).code).toBe('invalid_argument');
     }
@@ -131,15 +131,15 @@ describe('evaluateProximity', () => {
     const controller = new AbortController();
     controller.abort();
 
-    const assessment = await library.evaluateProximity(
+    const report = await library.getProximityReport(
       request({ sessionId: '5', signal: controller.signal })
     );
 
-    expect(assessment.status).toBe('cancelled');
-    expect(assessment.source).toBe('unavailable');
-    expect(assessment.measuredPosition).toBeNull();
-    expect(assessment.sessionId).toBe('5');
-    expect(assessment.diagnostics.reasonCodes).toEqual(['request_cancelled']);
+    expect(report.status).toBe('cancelled');
+    expect(report.source).toBe('unavailable');
+    expect(report.measuredPosition).toBeNull();
+    expect(report.sessionId).toBe('5');
+    expect(report.diagnostics.reasonCodes).toEqual(['request_cancelled']);
     expect(native.calls).toEqual([]);
   });
 
@@ -148,7 +148,7 @@ describe('evaluateProximity', () => {
     controller.abort();
 
     const error = await errorOf(
-      library.evaluateProximity(
+      library.getProximityReport(
         request({ radiusMeters: -1, signal: controller.signal })
       )
     );
@@ -160,10 +160,10 @@ describe('evaluateProximity', () => {
     const signal = new CountingSignal();
     let howManyAnswers = 0;
     const pending = library
-      .evaluateProximity(request({ signal: signal as unknown as AbortSignal }))
-      .then((assessment) => {
+      .getProximityReport(request({ signal: signal as unknown as AbortSignal }))
+      .then((report) => {
         howManyAnswers += 1;
-        return assessment;
+        return report;
       });
     await letPromisesSettle();
     const requestId = native.onlyOpenRequestId();
@@ -173,37 +173,37 @@ describe('evaluateProximity', () => {
     expect(native.cancelledRequestIds).toEqual([requestId]);
 
     // The native side answers the cancel with the final report.
-    native.finish(requestId, cancelledNativeAssessment());
-    const assessment = await pending;
+    native.finish(requestId, cancelledNativeReport());
+    const report = await pending;
 
-    expect(assessment.status).toBe('cancelled');
-    expect(assessment.requestId).toBe(requestId);
+    expect(report.status).toBe('cancelled');
+    expect(report.requestId).toBe(requestId);
     expect(howManyAnswers).toBe(1);
     expect(signal.listeners).toHaveLength(0);
   });
 
   it('CON-005 aborted after the answer: nothing is cancelled or rewritten', async () => {
     const signal = new CountingSignal();
-    const pending = library.evaluateProximity(
+    const pending = library.getProximityReport(
       request({ signal: signal as unknown as AbortSignal })
     );
     await letPromisesSettle();
-    native.finish(native.onlyOpenRequestId(), goldenNativeAssessment());
-    const assessment = await pending;
-    const before = JSON.stringify(assessment);
+    native.finish(native.onlyOpenRequestId(), goldenNativeReport());
+    const report = await pending;
+    const before = JSON.stringify(report);
 
     signal.abort();
     await letPromisesSettle();
 
     expect(native.cancelledRequestIds).toEqual([]);
-    expect(JSON.stringify(assessment)).toBe(before);
-    expect(assessment.status).toBe('available');
+    expect(JSON.stringify(report)).toBe(before);
+    expect(report.status).toBe('available');
     expect(signal.listeners).toHaveLength(0);
   });
 
   it('CON-006 aborting twice cancels once and breaks nothing', async () => {
     const controller = new AbortController();
-    const pending = library.evaluateProximity(
+    const pending = library.getProximityReport(
       request({ signal: controller.signal })
     );
     await letPromisesSettle();
@@ -213,18 +213,18 @@ describe('evaluateProximity', () => {
     controller.abort();
     expect(native.cancelledRequestIds).toEqual([requestId]);
 
-    native.finish(requestId, cancelledNativeAssessment());
+    native.finish(requestId, cancelledNativeReport());
     expect((await pending).status).toBe('cancelled');
   });
 
-  it('CON-013 aborting one evaluation leaves the other one alone', async () => {
+  it('CON-013 aborting one request leaves the other one alone', async () => {
     const controller = new AbortController();
-    const cancelled = library.evaluateProximity(
+    const cancelled = library.getProximityReport(
       request({ signal: controller.signal })
     );
-    const kept = library.evaluateProximity(request());
+    const kept = library.getProximityReport(request());
     await letPromisesSettle();
-    const [cancelledId, keptId] = [...native.openEvaluations.keys()] as [
+    const [cancelledId, keptId] = [...native.openRequests.keys()] as [
       string,
       string,
     ];
@@ -232,8 +232,8 @@ describe('evaluateProximity', () => {
     controller.abort();
     expect(native.cancelledRequestIds).toEqual([cancelledId]);
 
-    native.finish(cancelledId, cancelledNativeAssessment());
-    native.finish(keptId, goldenNativeAssessment());
+    native.finish(cancelledId, cancelledNativeReport());
+    native.finish(keptId, goldenNativeReport());
     expect((await cancelled).status).toBe('cancelled');
     expect((await kept).status).toBe('available');
   });
@@ -243,7 +243,7 @@ describe('evaluateProximity', () => {
     native.nextRejection = { code: 'native_internal_error', message: 'full' };
 
     const error = await errorOf(
-      library.evaluateProximity(
+      library.getProximityReport(
         request({ signal: signal as unknown as AbortSignal })
       )
     );
@@ -253,10 +253,10 @@ describe('evaluateProximity', () => {
   });
 
   it('refuses a report from another version of the native code', async () => {
-    const pending = library.evaluateProximity(request());
+    const pending = library.getProximityReport(request());
     await letPromisesSettle();
     native.finish(native.onlyOpenRequestId(), {
-      ...goldenNativeAssessment(),
+      ...goldenNativeReport(),
       transportVersion: 1,
     });
 
@@ -288,7 +288,7 @@ describe('errors that come from the native side', () => {
 
   it('a request the native side refuses is an InvalidArgumentError', async () => {
     native.nextRejection = { code: 'invalid_argument', message: 'bad radius' };
-    const error = await errorOf(library.evaluateProximity(request()));
+    const error = await errorOf(library.getProximityReport(request()));
     expect(error).toBeInstanceOf(InvalidArgumentError);
   });
 
@@ -319,7 +319,7 @@ describe('errors that come from the native side', () => {
       missing.startSession(),
       missing.clearHistory('1'),
       missing.stopSession('1'),
-      missing.evaluateProximity(request()),
+      missing.getProximityReport(request()),
       missing.simulation.enable(),
       missing.simulation.disable(),
       missing.simulation.pushReadings([]),

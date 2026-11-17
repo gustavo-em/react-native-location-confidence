@@ -53,7 +53,7 @@ export type NativeSessionResult = {
 };
 
 /** Every field is filled in by the JavaScript side: no optional values. */
-export type NativeEvaluateRequest = {
+export type NativeRequest = {
   sessionId: string | null;
   latitude: number;
   longitude: number;
@@ -76,7 +76,7 @@ export type NativeEvaluateRequest = {
  * source...) travel as the engine's numbers; mapper.ts turns them into the
  * public texts, in one place for Android and iOS.
  */
-export type NativeAssessment = {
+export type NativeReport = {
   transportVersion: number;
   sessionId: string | null;
   status: number;
@@ -146,12 +146,9 @@ export interface Spec extends TurboModule {
 
   /**
    * `requestId` is chosen by JavaScript before the call, so that
-   * cancelRequest() can name an evaluation whose Promise has not come back.
+   * cancelRequest() can name a request whose Promise has not come back.
    */
-  evaluate(
-    requestId: string,
-    request: NativeEvaluateRequest
-  ): Promise<NativeAssessment>;
+  getReport(requestId: string, request: NativeRequest): Promise<NativeReport>;
   cancelRequest(requestId: string): void;
 
   // Simulation: the app feeds readings of its own instead of the GPS.

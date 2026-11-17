@@ -7,7 +7,7 @@ import {
   View,
   type LayoutChangeEvent,
 } from 'react-native';
-import type { Assessment } from 'react-native-location-confidence';
+import type { ProximityReport } from 'react-native-location-confidence';
 import { colorOfRelation, colors, fonts } from '../theme';
 import type { ReadingOnTheMap } from './scenarios';
 import { STREETS, toPoint, type Point } from './world';
@@ -33,7 +33,7 @@ type Props = Readonly<{
   radiusMeters: number;
   courier: Point | null;
   readings: readonly ReadingOnTheMap[];
-  assessment: Assessment | null;
+  report: ProximityReport | null;
 }>;
 
 const SCALE_BAR_METERS = 100;
@@ -79,7 +79,7 @@ export function StreetMap({
   radiusMeters,
   courier,
   readings,
-  assessment,
+  report,
 }: Props) {
   const [size, setSize] = useState({ width: 0, height: 0 });
   const onLayout = (event: LayoutChangeEvent) => {
@@ -94,11 +94,9 @@ export function StreetMap({
 
   // --- The library's answer -------------------------------------------------
   const readingUsed =
-    assessment?.measuredPosition != null
-      ? toPoint(assessment.measuredPosition)
-      : null;
-  const couldBeOffMeters = assessment?.effectiveUncertaintyMeters ?? 0;
-  const gpsErrorMeters = assessment?.horizontalAccuracyMeters ?? 0;
+    report?.measuredPosition != null ? toPoint(report.measuredPosition) : null;
+  const couldBeOffMeters = report?.effectiveUncertaintyMeters ?? 0;
+  const gpsErrorMeters = report?.horizontalAccuracyMeters ?? 0;
 
   // An area far larger than the map is drawn only as large as it needs to
   // be to cover the map: the picture is the same and the View stays small.
@@ -142,9 +140,7 @@ export function StreetMap({
   );
 
   const areaColor =
-    assessment === null
-      ? colors.ink
-      : colorOfRelation(assessment.evidenceRelation);
+    report === null ? colors.ink : colorOfRelation(report.evidenceRelation);
   const radiusPixels = radiusMeters * pixelsPerMeter;
   const streetPixels = Math.max(3, STREETS.widthMeters * pixelsPerMeter);
   const mapIsMeasured = size.width > 0;

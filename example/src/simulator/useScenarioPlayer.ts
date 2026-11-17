@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   LocationConfidence,
-  type Assessment,
+  type ProximityReport,
 } from 'react-native-location-confidence';
 import type { Moment, ReadingOnTheMap, Scenario } from './scenarios';
 import { ADDRESS, toCoordinates } from './world';
@@ -11,7 +11,7 @@ import { ADDRESS, toCoordinates } from './world';
  *
  * Every second:
  *
- *   1. ask the library for an evaluation      (it waits for a reading)
+ *   1. ask the library for a request          (it waits for a reading)
  *   2. hand over what the pretend GPS reports (maybe nothing)
  *   3. show the answer when it comes
  *
@@ -20,11 +20,11 @@ import { ADDRESS, toCoordinates } from './world';
  */
 
 /**
- * Short waits, so the screen follows the scenario closely: an evaluation
+ * Short waits, so the screen follows the scenario closely: a request
  * waits at most half a second for a reading and then answers with what it
  * remembers.
  */
-const EVALUATION_OPTIONS = {
+const REQUEST_OPTIONS = {
   totalDeadlineMs: 1000,
   initialFixBudgetMs: 500,
   recoveryWindowMs: 0,
@@ -40,9 +40,9 @@ export type PlayerState = Readonly<{
   moment: Moment | null;
   /** The last readings the pretend GPS reported, oldest first. */
   readings: readonly ReadingOnTheMap[];
-  assessment: Assessment | null;
+  report: ProximityReport | null;
   /** The answers of this run, oldest first, for the strip under the index. */
-  answers: readonly Assessment[];
+  answers: readonly ProximityReport[];
   problem: string | null;
 }>;
 
@@ -52,7 +52,7 @@ const NOTHING_PLAYED_YET: PlayerState = {
   second: 0,
   moment: null,
   readings: [],
-  assessment: null,
+  report: null,
   answers: [],
   problem: null,
 };
@@ -71,12 +71,12 @@ export function useScenarioPlayer(): {
   // moved on: another scenario was picked, or the screen was closed.
   const runNumber = useRef(0);
   const sessionId = useRef<string | null>(null);
-  const evaluationInProgress = useRef<AbortController | null>(null);
+  const requestInProgress = useRef<AbortController | null>(null);
 
   const stopWhatIsRunning = useCallback(async () => {
     runNumber.current += 1;
-    evaluationInProgress.current?.abort();
-    evaluationInProgress.current = null;
+    requestInProgress.current?.abort();
+    requestInProgress.current = null;
 
     const sessionToClose = sessionId.current;
     sessionId.current = null;
@@ -123,14 +123,14 @@ export function useScenarioPlayer(): {
             ),
           }));
 
-          // 1. Ask. The evaluation is now waiting for a reading.
+          // 1. Ask. The request is now waiting for a reading.
           const abort = new AbortController();
-          evaluationInProgress.current = abort;
-          const answer = LocationConfidence.evaluateProximity({
+          requestInProgress.current = abort;
+          const answer = LocationConfidence.getProximityReport({
             sessionId: session.id,
             destination: ADDRESS,
             radiusMeters: scenario.radiusMeters,
-            options: EVALUATION_OPTIONS,
+            options: REQUEST_OPTIONS,
             signal: abort.signal,
           });
 
@@ -154,14 +154,14 @@ export function useScenarioPlayer(): {
           }
 
           // 3. Show the answer.
-          const assessment = await answer;
+          const report = await answer;
           if (!stillThisRun()) {
             return;
           }
           setState((before) => ({
             ...before,
-            assessment,
-            answers: [...before.answers, assessment].slice(
+            report,
+            answers: [...before.answers, report].slice(
               -ANSWERS_KEPT_FOR_THE_STRIP
             ),
           }));

@@ -1,5 +1,5 @@
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { AssessmentPanel } from '../components/AssessmentPanel';
+import { ReportPanel } from '../components/ReportPanel';
 import { colors, fonts } from '../theme';
 import { SCENARIOS } from './scenarios';
 import { MapLegend, StreetMap } from './StreetMap';
@@ -63,7 +63,7 @@ export function SimulatorScreen() {
           radiusMeters={scenario?.radiusMeters ?? 80}
           courier={moment?.courier ?? null}
           readings={state.readings}
-          assessment={state.assessment}
+          report={state.report}
         />
       </View>
       <View style={styles.progressTrack}>
@@ -78,8 +78,8 @@ export function SimulatorScreen() {
             'real GPS stays off and no permission is needed.'}
       </Text>
 
-      <AssessmentPanel
-        assessment={state.assessment}
+      <ReportPanel
+        report={state.report}
         answers={state.answers}
         whenEmpty="The library's answer shows up here, once per second."
       />

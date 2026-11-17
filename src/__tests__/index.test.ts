@@ -44,7 +44,7 @@ describe('importing the library', () => {
 
     const library = require('../index') as typeof import('../index');
 
-    expect(typeof library.LocationConfidence.evaluateProximity).toBe(
+    expect(typeof library.LocationConfidence.getProximityReport).toBe(
       'function'
     );
     expect(native.calls).toEqual([]);
