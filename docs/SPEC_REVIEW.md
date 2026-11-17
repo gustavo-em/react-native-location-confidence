@@ -387,6 +387,19 @@ Consequência conhecida para INV-08: por leitura, o score e a incerteza são mon
 | Testes | `swift test` no Mac, por um `Package.swift` que não é distribuído; os mesmos roteiros do Kotlin | plano §3 previa XCTest com o app |
 | Manifesto de privacidade | `PrivacyInfo.xcprivacy` no pod: sem rastreio, sem dado coletado, motivo `35F9.1` para o relógio | R-14 |
 
+### R-35 [M] Preparo de release: achados da Fase 8
+
+| Ponto | Situação |
+|---|---|
+| Testes Kotlin e o build do motor para o computador iam no pacote npm, e o `build.gradle` os ligava a toda tarefa de teste | corrigido: ficam fora do pacote, e o `build.gradle` só monta a parte de testes quando as fontes de teste existem |
+| Arquivo solto `android/src/main/cpp/Untitled` ia no pacote npm | excluído do pacote; o arquivo não foi tocado |
+| `yarn lint` falhava depois de rodar os testes, por causa de relatórios e arquivos gerados em pastas de build | o lint passou a ignorar essas pastas |
+| Binários pré-compilados do React Native na variante errada depois de trocar de configuração no iOS | não é da biblioteca; documentado no `CONTRIBUTING.md` |
+| `peerDependencies` aceita qualquer React Native; só a 0.88.1 foi validada (PUB-025) | em aberto: decisão do owner |
+| `files` do `package.json` lista `react-native.config.js`, que não existe na raiz | inofensivo; mantido |
+| Integração contínua | jobs escritos, nunca executados (não há remoto) |
+| PUB-015, aparelhos físicos, stress e benchmark | não feitos |
+
 ## Decisões — aprovadas pelo owner em 14/11/2026
 
 | ID | Decisão | Resultado |
