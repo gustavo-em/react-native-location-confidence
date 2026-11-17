@@ -2,7 +2,7 @@ package com.locationconfidence
 
 import com.locationconfidence.models.ActivityConfidence
 import com.locationconfidence.models.DeviceState
-import com.locationconfidence.models.EvaluationSettings
+import com.locationconfidence.models.RequestSettings
 import com.locationconfidence.models.LocationPermission
 import com.locationconfidence.models.LocationProviderState
 import com.locationconfidence.models.MockPolicy
@@ -171,8 +171,8 @@ fun phoneWhereEverythingWorks() = DeviceState(
   phoneActivity = PhoneActivitySupport.AVAILABLE,
 )
 
-/** The usual evaluation: the address at latitude 0, longitude 0, radius 100 meters. */
-fun usualEvaluation() = EvaluationSettings(
+/** The usual request: the address at latitude 0, longitude 0, radius 100 meters. */
+fun usualRequest() = RequestSettings(
   destinationLatitude = 0.0,
   destinationLongitude = 0.0,
   radiusMeters = 100.0,

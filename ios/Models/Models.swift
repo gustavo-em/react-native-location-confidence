@@ -137,8 +137,8 @@ struct SessionSettings {
   var longestCollectingTimeMs: Int64
 }
 
-/// What the app asked for in one evaluation.
-struct EvaluationSettings {
+/// What the app asked for in one request.
+struct RequestSettings {
   var destinationLatitude: Double
   var destinationLongitude: Double
   var radiusMeters: Double
@@ -192,7 +192,7 @@ struct PlatformWork: Equatable {
   var wakeUpAtMs: Int64
 }
 
-/// The final report of one evaluation.
+/// The final report of one request.
 ///
 /// The fields that are a choice from a list (status, source...) stay as the
 /// engine's numbers here. The JavaScript side turns them into their public

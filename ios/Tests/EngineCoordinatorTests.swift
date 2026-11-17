@@ -8,8 +8,8 @@ import XCTest
 ///
 /// What is checked here is the part Swift is responsible for:
 ///   - the GPS is turned on and off exactly when the engine says;
-///   - nothing is left running after an evaluation ends, however it ends;
-///   - each evaluation gets exactly one answer;
+///   - nothing is left running after a request ends, however it ends;
+///   - each request gets exactly one answer;
 ///   - a delivery that arrives too late changes nothing.
 ///
 /// These are the same tests as android/src/sharedTest/.../EngineCoordinatorTest.kt.
@@ -46,10 +46,10 @@ final class EngineCoordinatorTests: XCTestCase {
     coordinator.shutDown()
   }
 
-  private func evaluate(
-    _ appId: String, sessionId: Int = 0, settings: EvaluationSettings = usualEvaluation()
+  private func startRequest(
+    _ appId: String, sessionId: Int = 0, settings: RequestSettings = usualRequest()
   ) {
-    coordinator.evaluate(
+    coordinator.startRequest(
       idGivenByTheApp: appId, sessionId: sessionId, settings: settings,
       onReport: { self.reports.append((appId, $0)) },
       onRefused: { self.refusals.append($0) })
@@ -85,12 +85,12 @@ final class EngineCoordinatorTests: XCTestCase {
     return !gps.isOn && !activitySensor.isOn && queue.howManyTimersAreSet == 0
   }
 
-  // MARK: One evaluation
+  // MARK: One request
 
   func test_REC_001_the_GPS_goes_on_a_good_reading_arrives_everything_goes_off() {
     XCTAssertTrue(everythingIsQuiet())
 
-    evaluate("a")
+    startRequest("a")
 
     XCTAssertTrue(gps.isOn)
     XCTAssertEqual(gps.timeBetweenReadingsMs, 1000)
@@ -112,8 +112,8 @@ final class EngineCoordinatorTests: XCTestCase {
     XCTAssertEqual(gps.timesStopped, 1)
   }
 
-  func test_REC_005_REC_011_with_no_reading_the_timers_alone_end_the_evaluation() {
-    evaluate("a")
+  func test_REC_005_REC_011_with_no_reading_the_timers_alone_end_the_request() {
+    startRequest("a")
 
     queue.advanceTo(4500)  // the first attempt is over
     XCTAssertTrue(reports.isEmpty)
@@ -131,7 +131,7 @@ final class EngineCoordinatorTests: XCTestCase {
   }
 
   func test_CON_002_CON_006_cancelling_ends_it_once_and_cancelling_again_does_nothing() {
-    evaluate("a")
+    startRequest("a")
     clock.now = 2000
 
     coordinator.cancel("a")
@@ -147,7 +147,7 @@ final class EngineCoordinatorTests: XCTestCase {
   }
 
   func test_CON_018_a_delivery_that_arrives_after_the_GPS_was_turned_off_is_ignored() {
-    evaluate("a")
+    startRequest("a")
     guard let listenerOfTheStoppedGps = gps.lastListener else {
       return XCTFail("the GPS was not started")
     }
@@ -164,15 +164,15 @@ final class EngineCoordinatorTests: XCTestCase {
     XCTAssertEqual(reports.count, 1)
     XCTAssertTrue(everythingIsQuiet())
 
-    // And it does not leak into the next evaluation either.
-    evaluate("b")
+    // And it does not leak into the next request either.
+    startRequest("b")
     listenerOfTheStoppedGps.onReadings([readingNorth(1600, 20.0)])
     XCTAssertEqual(howManyReportsOf("b"), 0)
     XCTAssertTrue(gps.isOn)
   }
 
   func test_CON_019_CON_020_a_timer_and_a_reading_that_race_give_one_answer() {
-    evaluate("a")
+    startRequest("a")
     guard let listener = gps.lastListener else {
       return XCTFail("the GPS was not started")
     }
@@ -188,9 +188,9 @@ final class EngineCoordinatorTests: XCTestCase {
   }
 
   func test_GEO_012_a_request_that_makes_no_sense_is_refused_and_turns_nothing_on() {
-    var broken = usualEvaluation()
+    var broken = usualRequest()
     broken.destinationLatitude = 91.0
-    evaluate("a", settings: broken)
+    startRequest("a", settings: broken)
 
     XCTAssertEqual(refusals, [.invalidRequest])
     XCTAssertTrue(reports.isEmpty)
@@ -198,11 +198,11 @@ final class EngineCoordinatorTests: XCTestCase {
     XCTAssertTrue(everythingIsQuiet())
   }
 
-  // MARK: Several evaluations
+  // MARK: Several requests
 
-  func test_CON_013_two_evaluations_share_one_GPS_and_cancelling_one_keeps_it_on() {
-    evaluate("a")
-    evaluate("b")
+  func test_CON_013_two_requests_share_one_GPS_and_cancelling_one_keeps_it_on() {
+    startRequest("a")
+    startRequest("b")
     XCTAssertEqual(gps.timesStarted, 1)
 
     coordinator.cancel("a")
@@ -219,12 +219,12 @@ final class EngineCoordinatorTests: XCTestCase {
     XCTAssertEqual(gps.timesStopped, 1)
   }
 
-  func test_CON_012_two_evaluations_with_different_addresses_get_different_answers() {
-    evaluate("near")
-    var farAway = usualEvaluation()
+  func test_CON_012_two_requests_with_different_addresses_get_different_answers() {
+    startRequest("near")
+    var farAway = usualRequest()
     farAway.destinationLongitude = 0.01
     farAway.radiusMeters = 50.0
-    evaluate("far", settings: farAway)
+    startRequest("far", settings: farAway)
 
     clock.now = 1000
     gps.deliver(readingNorth(1000, 20.0))
@@ -235,10 +235,10 @@ final class EngineCoordinatorTests: XCTestCase {
     XCTAssertEqual(reportOf("far").radiusMeters, 50.0)
   }
 
-  func test_CON_016_a_hundred_evaluations_cancelled_one_answer_each_and_nothing_left_on() {
+  func test_CON_016_a_hundred_requests_cancelled_one_answer_each_and_nothing_left_on() {
     for round in 0..<100 {
       let id = "request-\(round)"
-      evaluate(id)
+      startRequest(id)
       clock.now += 300
       coordinator.cancel(id)
       gps.lastListener?.onReadings([readingNorth(clock.now, 20.0)])  // late
@@ -269,7 +269,7 @@ final class EngineCoordinatorTests: XCTestCase {
 
     for (index, entry) in broken.enumerated() {
       device.state = entry.0
-      evaluate("case-\(index)")
+      startRequest("case-\(index)")
 
       XCTAssertEqual(reportOf("case-\(index)").status, 2)  // unavailable
       XCTAssertTrue(reportOf("case-\(index)").reasons.contains(entry.1), entry.1)
@@ -278,9 +278,9 @@ final class EngineCoordinatorTests: XCTestCase {
     XCTAssertTrue(everythingIsQuiet())
   }
 
-  func test_CON_009_CON_010_CON_011_the_background_ends_the_evaluation_and_nothing_restarts() {
+  func test_CON_009_CON_010_CON_011_the_background_ends_the_request_and_nothing_restarts() {
     let session = openSession(keepCollecting: true)
-    evaluate("a", sessionId: session.sessionId)
+    startRequest("a", sessionId: session.sessionId)
     XCTAssertTrue(gps.isOn)
 
     coordinator.appWentToBackground()
@@ -310,15 +310,15 @@ final class EngineCoordinatorTests: XCTestCase {
     // The user gives it back. The reading from before must not be there.
     device.state = phoneWhereEverythingWorks()
     clock.now = 2000
-    evaluate("a", sessionId: session.sessionId)
+    startRequest("a", sessionId: session.sessionId)
     queue.advanceTo(30000)
 
     XCTAssertEqual(reportOf("a").status, 2)  // unavailable: nothing remembered
     XCTAssertEqual(reportOf("a").readingsExamined, 0)
   }
 
-  func test_REC_023_when_the_GPS_fails_the_evaluation_ends_and_the_GPS_is_turned_off() {
-    evaluate("a")
+  func test_REC_023_when_the_GPS_fails_the_request_ends_and_the_GPS_is_turned_off() {
+    startRequest("a")
 
     gps.fail()
 
@@ -343,8 +343,8 @@ final class EngineCoordinatorTests: XCTestCase {
     XCTAssertEqual(gps.timeBetweenReadingsMs, 5000)
     XCTAssertFalse(activitySensor.isOn)  // collecting alone does not need the activity
 
-    // An evaluation asks for readings faster; the same GPS is used.
-    evaluate("a", sessionId: session.sessionId)
+    // A request asks for readings faster; the same GPS is used.
+    startRequest("a", sessionId: session.sessionId)
     XCTAssertEqual(gps.timeBetweenReadingsMs, 1000)
     XCTAssertTrue(activitySensor.isOn)
 
@@ -363,9 +363,9 @@ final class EngineCoordinatorTests: XCTestCase {
     XCTAssertTrue(everythingIsQuiet())
   }
 
-  func test_CON_007_closing_a_session_ends_its_evaluations() {
+  func test_CON_007_closing_a_session_ends_its_requests() {
     let session = openSession(keepCollecting: false)
-    evaluate("a", sessionId: session.sessionId)
+    startRequest("a", sessionId: session.sessionId)
 
     coordinator.closeSession(session.sessionId) {}
 
@@ -378,7 +378,7 @@ final class EngineCoordinatorTests: XCTestCase {
     for round in 0..<100 {
       let session = openSession(keepCollecting: true)
       gps.deliver(readingNorth(clock.now, 20.0))
-      evaluate("request-\(round)", sessionId: session.sessionId)
+      startRequest("request-\(round)", sessionId: session.sessionId)
       clock.now += 500
       coordinator.closeSession(session.sessionId) {}
       XCTAssertTrue(everythingIsQuiet())
@@ -389,7 +389,7 @@ final class EngineCoordinatorTests: XCTestCase {
   // MARK: The phone activity
 
   func test_what_the_activity_sensor_reports_reaches_the_report() {
-    evaluate("a")
+    startRequest("a")
     XCTAssertTrue(activitySensor.isOn)
 
     activitySensor.report(.walking, sinceMs: 0)
@@ -403,12 +403,12 @@ final class EngineCoordinatorTests: XCTestCase {
 
   func test_PLT_024_without_the_activity_permission_the_sensor_is_never_touched() {
     // Touching the sensor before the user was asked would show the system's
-    // dialog in the middle of an evaluation.
+    // dialog in the middle of a request.
     var notAsked = phoneWhereEverythingWorks()
     notAsked.phoneActivity = .permissionNotAsked
     device.state = notAsked
 
-    evaluate("a")
+    startRequest("a")
     XCTAssertEqual(activitySensor.timesStarted, 0)
 
     clock.now = 1000
@@ -426,7 +426,7 @@ final class EngineCoordinatorTests: XCTestCase {
     device.state = denied
     coordinator.setSimulationEnabled(true) {}
 
-    evaluate("simulated")
+    startRequest("simulated")
     XCTAssertEqual(gps.timesStarted, 0)
     XCTAssertEqual(queue.howManyTimersAreSet, 1)
 
@@ -443,7 +443,7 @@ final class EngineCoordinatorTests: XCTestCase {
 
     // Out of the simulation the real state of the phone counts again.
     coordinator.setSimulationEnabled(false) {}
-    evaluate("real")
+    startRequest("real")
     XCTAssertEqual(reportOf("real").status, 2)
     XCTAssertTrue(reportOf("real").reasons.contains("permission_denied"))
     XCTAssertFalse(reportOf("real").reasons.contains("simulated_location_source"))
@@ -457,9 +457,9 @@ final class EngineCoordinatorTests: XCTestCase {
     coordinator.simulateReadings([readingNorth(0, 20.0, 5.0)]) {}
     coordinator.simulatePhoneActivity(.standingStill, confidence: .high) {}
 
-    // 10 seconds later an evaluation gets no new reading.
+    // 10 seconds later a request gets no new reading.
     clock.now = 10000
-    evaluate("a", sessionId: session.sessionId)
+    startRequest("a", sessionId: session.sessionId)
     XCTAssertFalse(activitySensor.isOn)  // the real sensor is left alone
     queue.advanceTo(14500)
 
@@ -471,7 +471,7 @@ final class EngineCoordinatorTests: XCTestCase {
     // "The phone stopped reporting": from now on its activity is unknown.
     coordinator.simulatePhoneActivity(nil, confidence: .high) {}
     clock.now = 20000
-    evaluate("b", sessionId: session.sessionId)
+    startRequest("b", sessionId: session.sessionId)
     queue.advanceTo(40000)
     XCTAssertFalse(reportOf("b").standingStillSinceTheReading)
   }
@@ -491,7 +491,7 @@ final class EngineCoordinatorTests: XCTestCase {
   // MARK: The end
 
   func test_CON_017_CON_028_after_shut_down_nobody_is_answered_and_nothing_runs() {
-    evaluate("a")
+    startRequest("a")
     guard let listener = gps.lastListener else {
       return XCTFail("the GPS was not started")
     }
@@ -505,7 +505,7 @@ final class EngineCoordinatorTests: XCTestCase {
 
     // Whatever arrives afterwards is ignored and nothing crashes.
     listener.onReadings([readingNorth(1000, 20.0)])
-    evaluate("b")
+    startRequest("b")
     coordinator.cancel("a")
     coordinator.appWentToBackground()
     coordinator.shutDown()
@@ -531,7 +531,7 @@ final class EngineCoordinatorTests: XCTestCase {
     let perThread = 250
     let lock = NSLock()
     var answers: [String: Int] = [:]
-    let allAnswered = expectation(description: "every evaluation is answered")
+    let allAnswered = expectation(description: "every request is answered")
     allAnswered.expectedFulfillmentCount = threads * perThread
 
     for thread in 0..<threads {
@@ -544,8 +544,8 @@ final class EngineCoordinatorTests: XCTestCase {
             lock.unlock()
             allAnswered.fulfill()
           }
-          busyCoordinator.evaluate(
-            idGivenByTheApp: id, sessionId: 0, settings: usualEvaluation(),
+          busyCoordinator.startRequest(
+            idGivenByTheApp: id, sessionId: 0, settings: usualRequest(),
             onReport: { _ in answered() }, onRefused: { _ in answered() })
           if count % 2 == 0 {
             busyCoordinator.simulateReadings([readingNorth(realClock.nowMs(), 20.0)]) {}

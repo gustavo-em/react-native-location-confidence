@@ -2,7 +2,7 @@ package com.locationconfidence.application
 
 import com.locationconfidence.models.ActivityConfidence
 import com.locationconfidence.models.DeviceState
-import com.locationconfidence.models.EvaluationSettings
+import com.locationconfidence.models.RequestSettings
 import com.locationconfidence.models.LocationPermission
 import com.locationconfidence.models.LocationProviderState
 import com.locationconfidence.models.PermissionPrecision
@@ -30,7 +30,7 @@ import com.locationconfidence.ports.StartRefusal
  * things and nothing else:
  *
  *   1. It TELLS the engine what happens:
- *        the app asked for something      openSession(), evaluate(), cancel()...
+ *        the app asked for something      openSession(), startRequest(), cancel()...
  *        the GPS delivered readings       (from the LocationSource)
  *        the timer fired                  (from the SerialQueue)
  *        the app went to the background   appWentToBackground()
@@ -47,11 +47,11 @@ import com.locationconfidence.ports.StartRefusal
  * anywhere in this file: that lives in the engine, and it is the same code
  * on Android and on iOS.
  *
- * THE ORDER OF THE CALLS, for one evaluation:
+ * THE ORDER OF THE CALLS, for one request:
  *
- *   evaluate()                                   <- called from the React Native thread
+ *   startRequest()                               <- called from the React Native thread
  *     `-- queue.post                             now on the engine's queue
- *           |-- engine.startEvaluation()
+ *           |-- engine.startRequest()
  *           `-- obeyTheEngine()
  *                 |-- engine.takeFinishedReport()        nothing yet
  *                 |-- engine.whatThePlatformMustDoNow()  "GPS on, wake up in 4.5 s"
@@ -79,7 +79,7 @@ class EngineCoordinator(
   private val realDeviceState: DeviceStateSource,
 ) {
 
-  /** Someone who is waiting for the report of an evaluation. */
+  /** Someone who is waiting for the report of a request. */
   private class Waiting(val idGivenByTheApp: String, val onReport: (Report) -> Unit)
 
   // Everything below is only touched from the queue.
@@ -140,24 +140,24 @@ class EngineCoordinator(
   }
 
   /**
-   * Starts an evaluation.
+   * Starts a request.
    *
    * Exactly one of the two callbacks is called, exactly once:
    *   [onReport]  with the final report, sooner or later;
    *   [onRefused] at once, when the engine did not accept the request.
    * Neither is called after [shutDown].
    */
-  fun evaluate(
+  fun startRequest(
     idGivenByTheApp: String,
     sessionId: Int,
-    settings: EvaluationSettings,
+    settings: RequestSettings,
     onReport: (Report) -> Unit,
     onRefused: (StartRefusal) -> Unit,
   ) {
     queue.post {
       if (isShutDown) return@post
 
-      val started = engine.startEvaluation(sessionId, settings, currentDeviceState(), clock.nowMs())
+      val started = engine.startRequest(sessionId, settings, currentDeviceState(), clock.nowMs())
 
       val refusal = started.refusal
       if (refusal != null) {
@@ -172,12 +172,12 @@ class EngineCoordinator(
     }
   }
 
-  /** Cancels an evaluation by the id the app gave. Unknown ids are ignored. */
+  /** Cancels a request by the id the app gave. Unknown ids are ignored. */
   fun cancel(idGivenByTheApp: String) {
     queue.post {
       if (isShutDown) return@post
       val requestId = requestIdByAppId[idGivenByTheApp] ?: return@post
-      engine.cancelEvaluation(requestId, clock.nowMs())
+      engine.cancelRequest(requestId, clock.nowMs())
       obeyTheEngine()
     }
   }
@@ -282,7 +282,7 @@ class EngineCoordinator(
 
   /**
    * Stops everything and destroys the engine. Called when React Native tears
-   * the module down. Evaluations that were still running get NO answer: the
+   * the module down. Requests that were still running get NO answer: the
    * JavaScript side that was waiting for them no longer exists.
    */
   fun shutDown() {

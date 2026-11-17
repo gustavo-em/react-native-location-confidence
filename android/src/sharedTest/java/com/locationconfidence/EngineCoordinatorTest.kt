@@ -29,8 +29,8 @@ import org.junit.Test
  *
  * What is checked here is the part Kotlin is responsible for:
  *   - the GPS is turned on and off exactly when the engine says;
- *   - nothing is left running after an evaluation ends, however it ends;
- *   - each evaluation gets exactly one answer;
+ *   - nothing is left running after a request ends, however it ends;
+ *   - each request gets exactly one answer;
  *   - a delivery that arrives too late changes nothing.
  */
 class EngineCoordinatorTest {
@@ -56,8 +56,8 @@ class EngineCoordinatorTest {
     coordinator.shutDown()
   }
 
-  private fun evaluate(appId: String, sessionId: Int = 0, settings: com.locationconfidence.models.EvaluationSettings = usualEvaluation()) {
-    coordinator.evaluate(appId, sessionId, settings, { reports.add(appId to it) }, { refusals.add(it) })
+  private fun startRequest(appId: String, sessionId: Int = 0, settings: com.locationconfidence.models.RequestSettings = usualRequest()) {
+    coordinator.startRequest(appId, sessionId, settings, { reports.add(appId to it) }, { refusals.add(it) })
   }
 
   private fun reportOf(appId: String): Report =
@@ -75,13 +75,13 @@ class EngineCoordinatorTest {
   private fun everythingIsQuiet(): Boolean =
     !gps.isOn && !activitySensor.isOn && queue.howManyTimersAreSet == 0
 
-  // --- One evaluation ----------------------------------------------------------
+  // --- One request ----------------------------------------------------------
 
   @Test
   fun REC_001_the_GPS_goes_on_a_good_reading_arrives_everything_goes_off() {
     assertTrue(everythingIsQuiet())
 
-    evaluate("a")
+    startRequest("a")
 
     assertTrue(gps.isOn)
     assertEquals(1000, gps.timeBetweenReadingsMs)
@@ -104,8 +104,8 @@ class EngineCoordinatorTest {
   }
 
   @Test
-  fun REC_005_REC_011_with_no_reading_the_timers_alone_end_the_evaluation() {
-    evaluate("a")
+  fun REC_005_REC_011_with_no_reading_the_timers_alone_end_the_request() {
+    startRequest("a")
 
     queue.advanceTo(4500) // the first attempt is over
     assertTrue(reports.isEmpty())
@@ -123,7 +123,7 @@ class EngineCoordinatorTest {
 
   @Test
   fun CON_002_CON_006_cancelling_ends_it_once_and_cancelling_again_does_nothing() {
-    evaluate("a")
+    startRequest("a")
     clock.now = 2000
 
     coordinator.cancel("a")
@@ -140,7 +140,7 @@ class EngineCoordinatorTest {
 
   @Test
   fun CON_018_PLT_015_a_delivery_that_arrives_after_the_GPS_was_turned_off_is_ignored() {
-    evaluate("a")
+    startRequest("a")
     val listenerOfTheStoppedGps = gps.lastListener!!
     clock.now = 1000
     gps.deliver(readingNorth(1000, 20.0))
@@ -155,8 +155,8 @@ class EngineCoordinatorTest {
     assertEquals(1, reports.size)
     assertTrue(everythingIsQuiet())
 
-    // And it does not leak into the next evaluation either.
-    evaluate("b")
+    // And it does not leak into the next request either.
+    startRequest("b")
     listenerOfTheStoppedGps.onReadings(listOf(readingNorth(1600, 20.0)))
     assertEquals(0, howManyReportsOf("b"))
     assertTrue(gps.isOn)
@@ -164,7 +164,7 @@ class EngineCoordinatorTest {
 
   @Test
   fun CON_019_CON_020_a_timer_and_a_reading_that_race_give_one_answer() {
-    evaluate("a")
+    startRequest("a")
     val listener = gps.lastListener!!
     queue.advanceTo(4500)
     queue.advanceTo(11500)
@@ -179,7 +179,7 @@ class EngineCoordinatorTest {
 
   @Test
   fun GEO_012_a_request_that_makes_no_sense_is_refused_and_turns_nothing_on() {
-    evaluate("a", settings = usualEvaluation().copy(destinationLatitude = 91.0))
+    startRequest("a", settings = usualRequest().copy(destinationLatitude = 91.0))
 
     assertEquals(listOf(StartRefusal.INVALID_REQUEST), refusals)
     assertTrue(reports.isEmpty())
@@ -187,12 +187,12 @@ class EngineCoordinatorTest {
     assertTrue(everythingIsQuiet())
   }
 
-  // --- Several evaluations --------------------------------------------------------
+  // --- Several requests --------------------------------------------------------
 
   @Test
-  fun CON_013_two_evaluations_share_one_GPS_and_cancelling_one_keeps_it_on() {
-    evaluate("a")
-    evaluate("b")
+  fun CON_013_two_requests_share_one_GPS_and_cancelling_one_keeps_it_on() {
+    startRequest("a")
+    startRequest("b")
     assertEquals(1, gps.timesStarted)
 
     coordinator.cancel("a")
@@ -210,9 +210,9 @@ class EngineCoordinatorTest {
   }
 
   @Test
-  fun CON_012_two_evaluations_with_different_addresses_get_different_answers() {
-    evaluate("near")
-    evaluate("far", settings = usualEvaluation().copy(destinationLongitude = 0.01, radiusMeters = 50.0))
+  fun CON_012_two_requests_with_different_addresses_get_different_answers() {
+    startRequest("near")
+    startRequest("far", settings = usualRequest().copy(destinationLongitude = 0.01, radiusMeters = 50.0))
 
     clock.now = 1000
     gps.deliver(readingNorth(1000, 20.0))
@@ -224,10 +224,10 @@ class EngineCoordinatorTest {
   }
 
   @Test
-  fun CON_016_a_hundred_evaluations_cancelled_one_answer_each_and_nothing_left_on() {
+  fun CON_016_a_hundred_requests_cancelled_one_answer_each_and_nothing_left_on() {
     for (round in 0 until 100) {
       val id = "request-$round"
-      evaluate(id)
+      startRequest(id)
       clock.now += 300
       coordinator.cancel(id)
       gps.lastListener!!.onReadings(listOf(readingNorth(clock.now, 20.0))) // late
@@ -255,7 +255,7 @@ class EngineCoordinatorTest {
 
     for ((index, case) in broken.withIndex()) {
       device.state = case.first
-      evaluate("case-$index")
+      startRequest("case-$index")
 
       assertEquals(2, reportOf("case-$index").status) // unavailable
       assertTrue(case.second, reportOf("case-$index").reasons.contains(case.second))
@@ -265,9 +265,9 @@ class EngineCoordinatorTest {
   }
 
   @Test
-  fun CON_009_CON_010_CON_011_the_background_ends_the_evaluation_and_nothing_restarts() {
+  fun CON_009_CON_010_CON_011_the_background_ends_the_request_and_nothing_restarts() {
     val session = openSession(keepCollecting = true)
-    evaluate("a", session.sessionId)
+    startRequest("a", session.sessionId)
     assertTrue(gps.isOn)
 
     coordinator.appWentToBackground()
@@ -296,7 +296,7 @@ class EngineCoordinatorTest {
     // The user gives it back. The reading from before must not be there.
     device.state = phoneWhereEverythingWorks()
     clock.now = 2000
-    evaluate("a", session.sessionId)
+    startRequest("a", session.sessionId)
     queue.advanceTo(30000)
 
     assertEquals(2, reportOf("a").status) // unavailable: nothing remembered
@@ -304,8 +304,8 @@ class EngineCoordinatorTest {
   }
 
   @Test
-  fun REC_023_when_the_GPS_fails_the_evaluation_ends_and_the_GPS_is_turned_off() {
-    evaluate("a")
+  fun REC_023_when_the_GPS_fails_the_request_ends_and_the_GPS_is_turned_off() {
+    startRequest("a")
 
     gps.fail()
 
@@ -332,8 +332,8 @@ class EngineCoordinatorTest {
     assertEquals(5000, gps.timeBetweenReadingsMs)
     assertFalse(activitySensor.isOn) // collecting alone does not need the activity
 
-    // An evaluation asks for readings faster; the same GPS is used.
-    evaluate("a", session.sessionId)
+    // A request asks for readings faster; the same GPS is used.
+    startRequest("a", session.sessionId)
     assertEquals(1000, gps.timeBetweenReadingsMs)
     assertTrue(activitySensor.isOn)
 
@@ -353,9 +353,9 @@ class EngineCoordinatorTest {
   }
 
   @Test
-  fun CON_007_closing_a_session_ends_its_evaluations() {
+  fun CON_007_closing_a_session_ends_its_requests() {
     val session = openSession(keepCollecting = false)
-    evaluate("a", session.sessionId)
+    startRequest("a", session.sessionId)
 
     coordinator.closeSession(session.sessionId) { }
 
@@ -369,7 +369,7 @@ class EngineCoordinatorTest {
     for (round in 0 until 100) {
       val session = openSession(keepCollecting = true)
       gps.deliver(readingNorth(clock.now, 20.0))
-      evaluate("request-$round", session.sessionId)
+      startRequest("request-$round", session.sessionId)
       clock.now += 500
       coordinator.closeSession(session.sessionId) { }
       assertTrue(everythingIsQuiet())
@@ -381,7 +381,7 @@ class EngineCoordinatorTest {
 
   @Test
   fun what_the_activity_sensor_reports_reaches_the_report() {
-    evaluate("a")
+    startRequest("a")
     assertTrue(activitySensor.isOn)
 
     activitySensor.report(PhoneActivity.WALKING, sinceMs = 0)
@@ -400,7 +400,7 @@ class EngineCoordinatorTest {
     device.state = phoneWhereEverythingWorks().copy(locationPermission = LocationPermission.DENIED)
     coordinator.setSimulationEnabled(true) { }
 
-    evaluate("simulated")
+    startRequest("simulated")
     assertEquals(0, gps.timesStarted)
     assertEquals(1, queue.howManyTimersAreSet)
 
@@ -417,7 +417,7 @@ class EngineCoordinatorTest {
 
     // Out of the simulation the real state of the phone counts again.
     coordinator.setSimulationEnabled(false) { }
-    evaluate("real")
+    startRequest("real")
     assertEquals(2, reportOf("real").status)
     assertTrue(reportOf("real").reasons.contains("permission_denied"))
     assertFalse(reportOf("real").reasons.contains("simulated_location_source"))
@@ -432,9 +432,9 @@ class EngineCoordinatorTest {
     coordinator.simulateReadings(listOf(readingNorth(0, 20.0, 5.0))) { }
     coordinator.simulatePhoneActivity(PhoneActivity.STANDING_STILL, ActivityConfidence.HIGH) { }
 
-    // 10 seconds later an evaluation gets no new reading.
+    // 10 seconds later a request gets no new reading.
     clock.now = 10000
-    evaluate("a", session.sessionId)
+    startRequest("a", session.sessionId)
     assertFalse(activitySensor.isOn) // the real sensor is left alone
     queue.advanceTo(14500)
 
@@ -446,7 +446,7 @@ class EngineCoordinatorTest {
     // "The phone stopped reporting": from now on its activity is unknown.
     coordinator.simulatePhoneActivity(null, ActivityConfidence.HIGH) { }
     clock.now = 20000
-    evaluate("b", session.sessionId)
+    startRequest("b", session.sessionId)
     queue.advanceTo(40000)
     assertFalse(reportOf("b").standingStillSinceTheReading)
   }
@@ -468,7 +468,7 @@ class EngineCoordinatorTest {
 
   @Test
   fun CON_017_CON_028_after_shut_down_nobody_is_answered_and_nothing_runs() {
-    evaluate("a")
+    startRequest("a")
     val listener = gps.lastListener!!
 
     coordinator.shutDown()
@@ -480,7 +480,7 @@ class EngineCoordinatorTest {
 
     // Whatever arrives afterwards is ignored and nothing crashes.
     listener.onReadings(listOf(readingNorth(1000, 20.0)))
-    evaluate("b")
+    startRequest("b")
     coordinator.cancel("a")
     coordinator.appWentToBackground()
     coordinator.shutDown()
@@ -508,10 +508,10 @@ class EngineCoordinatorTest {
         for (count in 0 until perThread) {
           val id = "t$thread-$count"
           answers[id] = AtomicInteger(0)
-          busyCoordinator.evaluate(
+          busyCoordinator.startRequest(
             id,
             0,
-            usualEvaluation(),
+            usualRequest(),
             onReport = {
               answers[id]!!.incrementAndGet()
               allAnswered.countDown()
@@ -531,7 +531,7 @@ class EngineCoordinatorTest {
     workers.forEach { it.start() }
     workers.forEach { it.join() }
 
-    assertTrue("every evaluation must be answered", allAnswered.await(30, TimeUnit.SECONDS))
+    assertTrue("every request must be answered", allAnswered.await(30, TimeUnit.SECONDS))
     assertEquals(threads * perThread, answers.size)
     assertTrue(answers.values.all { it.get() == 1 })
 

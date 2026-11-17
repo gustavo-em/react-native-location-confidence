@@ -7,7 +7,7 @@ import Foundation
 /// things and nothing else:
 ///
 ///   1. It TELLS the engine what happens:
-///        the app asked for something      openSession(), evaluate(), cancel()...
+///        the app asked for something      openSession(), startRequest(), cancel()...
 ///        the GPS delivered readings       (from the LocationSource)
 ///        the timer fired                  (from the SerialQueue)
 ///        the app went to the background   appWentToBackground()
@@ -25,11 +25,11 @@ import Foundation
 /// on Android and on iOS. This file itself is a line-by-line twin of
 /// android/.../application/EngineCoordinator.kt.
 ///
-/// THE ORDER OF THE CALLS, for one evaluation:
+/// THE ORDER OF THE CALLS, for one request:
 ///
-///   evaluate()                                   <- called from any thread
+///   startRequest()                               <- called from any thread
 ///     `-- queue.post                             now on the engine's queue
-///           |-- engine.startEvaluation()
+///           |-- engine.startRequest()
 ///           `-- obeyTheEngine()
 ///                 |-- engine.takeFinishedReport()        nothing yet
 ///                 |-- engine.whatThePlatformMustDoNow()  "GPS on, wake up in 4.5 s"
@@ -55,7 +55,7 @@ final class EngineCoordinator {
   private let phoneActivitySource: PhoneActivitySource
   private let realDeviceState: DeviceStateSource
 
-  /// Someone who is waiting for the report of an evaluation.
+  /// Someone who is waiting for the report of a request.
   private struct Waiting {
     let idGivenByTheApp: String
     let onReport: (Report) -> Void
@@ -135,23 +135,23 @@ final class EngineCoordinator {
     }
   }
 
-  /// Starts an evaluation.
+  /// Starts a request.
   ///
   /// Exactly one of the two callbacks is called, exactly once:
   ///   `onReport`  with the final report, sooner or later;
   ///   `onRefused` at once, when the engine did not accept the request.
   /// Neither is called after shutDown().
-  func evaluate(
+  func startRequest(
     idGivenByTheApp: String,
     sessionId: Int,
-    settings: EvaluationSettings,
+    settings: RequestSettings,
     onReport: @escaping (Report) -> Void,
     onRefused: @escaping (StartRefusal) -> Void
   ) {
     queue.post {
       if self.isShutDown { return }
 
-      let started = self.engine.startEvaluation(
+      let started = self.engine.startRequest(
         sessionId: sessionId, settings: settings, device: self.currentDeviceState(),
         nowMs: self.clock.nowMs())
 
@@ -168,12 +168,12 @@ final class EngineCoordinator {
     }
   }
 
-  /// Cancels an evaluation by the id the app gave. Unknown ids are ignored.
+  /// Cancels a request by the id the app gave. Unknown ids are ignored.
   func cancel(_ idGivenByTheApp: String) {
     queue.post {
       if self.isShutDown { return }
       guard let requestId = self.requestIdByAppId[idGivenByTheApp] else { return }
-      self.engine.cancelEvaluation(requestId, nowMs: self.clock.nowMs())
+      self.engine.cancelRequest(requestId, nowMs: self.clock.nowMs())
       self.obeyTheEngine()
     }
   }
@@ -279,7 +279,7 @@ final class EngineCoordinator {
   // MARK: The end
 
   /// Stops everything and destroys the engine. Called when React Native tears
-  /// the module down. Evaluations that were still running get NO answer: the
+  /// the module down. Requests that were still running get NO answer: the
   /// JavaScript side that was waiting for them no longer exists.
   func shutDown() {
     queue.shutDownAfter {

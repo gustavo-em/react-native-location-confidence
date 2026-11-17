@@ -209,7 +209,7 @@ public final class LocationConfidenceBridge: NSObject {
     coordinator.closeSession(sessionNumber(sessionId)) { resolve(nil) }
   }
 
-  // MARK: Evaluations
+  // MARK: Requests
 
   /// `request` has the fields of NativeEvaluateRequest (src/NativeLocationConfidence.ts).
   @objc public func evaluate(
@@ -229,7 +229,7 @@ public final class LocationConfidenceBridge: NSObject {
 
     let sessionIdFromTheApp = request["sessionId"] as? String
 
-    let settings = EvaluationSettings(
+    let settings = RequestSettings(
       destinationLatitude: number("latitude"),
       destinationLongitude: number("longitude"),
       radiusMeters: number("radiusMeters"),
@@ -248,7 +248,7 @@ public final class LocationConfidenceBridge: NSObject {
     // No session: the engine's number for that is 0.
     let session = sessionIdFromTheApp.map { sessionNumber($0) } ?? 0
 
-    coordinator.evaluate(
+    coordinator.startRequest(
       idGivenByTheApp: requestId,
       sessionId: session,
       settings: settings,
@@ -260,7 +260,7 @@ public final class LocationConfidenceBridge: NSObject {
         case .invalidRequest:
           reject("invalid_argument", "The destination or the radius is not valid")
         case .engineIsFull:
-          reject("native_internal_error", "The engine could not take one more evaluation")
+          reject("native_internal_error", "The engine could not take one more request")
         }
       }
     )

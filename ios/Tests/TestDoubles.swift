@@ -168,9 +168,9 @@ func phoneWhereEverythingWorks() -> DeviceState {
   )
 }
 
-/// The usual evaluation: the address at latitude 0, longitude 0, radius 100 meters.
-func usualEvaluation() -> EvaluationSettings {
-  return EvaluationSettings(
+/// The usual request: the address at latitude 0, longitude 0, radius 100 meters.
+func usualRequest() -> RequestSettings {
+  return RequestSettings(
     destinationLatitude: 0,
     destinationLongitude: 0,
     radiusMeters: 100,

@@ -3,7 +3,7 @@ package com.locationconfidence.core
 import com.locationconfidence.models.ActivityConfidence
 import com.locationconfidence.models.CollectingState
 import com.locationconfidence.models.DeviceState
-import com.locationconfidence.models.EvaluationSettings
+import com.locationconfidence.models.RequestSettings
 import com.locationconfidence.models.PhoneActivity
 import com.locationconfidence.models.PlatformWork
 import com.locationconfidence.models.Reading
@@ -11,7 +11,7 @@ import com.locationconfidence.models.Report
 import com.locationconfidence.models.SessionOpened
 import com.locationconfidence.models.SessionSettings
 import com.locationconfidence.ports.CoreEnginePort
-import com.locationconfidence.ports.EvaluationStart
+import com.locationconfidence.ports.RequestStart
 import com.locationconfidence.ports.StartRefusal
 
 /**
@@ -50,7 +50,7 @@ internal class CoreEngine private constructor(private var engine: Long) : CoreEn
     /** How many steps a report always carries (LCE_MAX_STEPS_IN_REPORT in lce.h). */
     private const val STEPS_IN_REPORT = 8
 
-    // Error codes of lce.h, as they come back from nativeStartEvaluation.
+    // Error codes of lce.h, as they come back from nativeStartRequest.
     private const val LCE_ERROR_INVALID_REQUEST = 2
 
     /**
@@ -102,14 +102,14 @@ internal class CoreEngine private constructor(private var engine: Long) : CoreEn
     NativeCore.nativeCloseSession(engine, sessionId, nowMs)
   }
 
-  // --- Evaluations -------------------------------------------------------------
+  // --- Requests -------------------------------------------------------------
 
-  override fun startEvaluation(
+  override fun startRequest(
     sessionId: Int,
-    settings: EvaluationSettings,
+    settings: RequestSettings,
     device: DeviceState,
     nowMs: Long,
-  ): EvaluationStart {
+  ): RequestStart {
     val numbers = NumberWriter()
     numbers.number(settings.destinationLatitude)
     numbers.number(settings.destinationLongitude)
@@ -127,17 +127,17 @@ internal class CoreEngine private constructor(private var engine: Long) : CoreEn
     writeDeviceState(device, numbers)
 
     // A positive answer is the request id; a negative one is minus an error code.
-    val answer = NativeCore.nativeStartEvaluation(engine, sessionId, numbers.toArray(), nowMs)
+    val answer = NativeCore.nativeStartRequest(engine, sessionId, numbers.toArray(), nowMs)
 
     return when {
-      answer > 0 -> EvaluationStart(answer.toInt(), null)
-      answer == -LCE_ERROR_INVALID_REQUEST.toLong() -> EvaluationStart(0, StartRefusal.INVALID_REQUEST)
-      else -> EvaluationStart(0, StartRefusal.ENGINE_IS_FULL)
+      answer > 0 -> RequestStart(answer.toInt(), null)
+      answer == -LCE_ERROR_INVALID_REQUEST.toLong() -> RequestStart(0, StartRefusal.INVALID_REQUEST)
+      else -> RequestStart(0, StartRefusal.ENGINE_IS_FULL)
     }
   }
 
-  override fun cancelEvaluation(requestId: Int, nowMs: Long) {
-    NativeCore.nativeCancelEvaluation(engine, requestId, nowMs)
+  override fun cancelRequest(requestId: Int, nowMs: Long) {
+    NativeCore.nativeCancelRequest(engine, requestId, nowMs)
   }
 
   // --- Things that happen ------------------------------------------------------

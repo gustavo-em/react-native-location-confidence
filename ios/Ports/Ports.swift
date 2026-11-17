@@ -69,17 +69,17 @@ protocol DeviceStateSource: AnyObject {
   func currentDeviceState() -> DeviceState
 }
 
-/// What can go wrong when an evaluation is started.
+/// What can go wrong when a request is started.
 enum StartRefusal {
   /// The address or the radius makes no sense.
   case invalidRequest
 
-  /// The engine could not take one more evaluation.
+  /// The engine could not take one more request.
   case engineIsFull
 }
 
-/// The answer to "start an evaluation": an id, or why it was refused.
-struct EvaluationStart {
+/// The answer to "start a request": an id, or why it was refused.
+struct RequestStart {
   var requestId: Int
   var refusal: StartRefusal?
 }
@@ -91,10 +91,10 @@ protocol CoreEnginePort: AnyObject {
   @discardableResult func clearSessionHistory(_ sessionId: Int) -> Bool
   func closeSession(_ sessionId: Int, nowMs: Int64)
 
-  func startEvaluation(
-    sessionId: Int, settings: EvaluationSettings, device: DeviceState, nowMs: Int64
-  ) -> EvaluationStart
-  func cancelEvaluation(_ requestId: Int, nowMs: Int64)
+  func startRequest(
+    sessionId: Int, settings: RequestSettings, device: DeviceState, nowMs: Int64
+  ) -> RequestStart
+  func cancelRequest(_ requestId: Int, nowMs: Int64)
 
   func readingsArrived(_ readings: [Reading], nowMs: Int64)
   func phoneActivityChanged(

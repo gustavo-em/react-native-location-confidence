@@ -19,7 +19,7 @@
  *
  *   2. Tell it what happens:
  *        the app opened a session        lce_open_session()
- *        the app made a request          lce_start_evaluation()
+ *        the app made a request          lce_start_request()
  *        the GPS delivered readings      lce_readings_arrived()
  *        the timer fired                 lce_time_passed()
  *        ...
@@ -194,7 +194,7 @@ typedef struct lce_session_settings {
 } lce_session_settings;
 
 /* What the app asked for in one request. */
-typedef struct lce_evaluation_settings {
+typedef struct lce_request_settings {
   /* The address, and how close to it counts as "there". */
   double destination_latitude;
   double destination_longitude;
@@ -213,7 +213,7 @@ typedef struct lce_evaluation_settings {
   int64_t extra_time_ms;          /* usually 7000; 0 means no extra time */
 
   lce_device_state device;
-} lce_evaluation_settings;
+} lce_request_settings;
 
 /* One reading, exactly as the GPS delivered it. Nothing in it is trusted
  * yet: the engine checks every field. */
@@ -372,14 +372,14 @@ int32_t lce_close_session(lce_engine* engine, uint32_t session_id, int64_t now_m
 /* Starts a request. `session_id` 0 means "no session".
  * On LCE_OK, `*request_id` identifies the request and its report will
  * come out of lce_take_finished_report(), maybe right away. */
-int32_t lce_start_evaluation(lce_engine* engine,
+int32_t lce_start_request(lce_engine* engine,
                              uint32_t session_id,
-                             const lce_evaluation_settings* settings,
+                             const lce_request_settings* settings,
                              int64_t now_ms,
                              uint32_t* request_id);
 
 /* Cancels a request. Cancelling one that already ended does nothing. */
-int32_t lce_cancel_evaluation(lce_engine* engine, uint32_t request_id, int64_t now_ms);
+int32_t lce_cancel_request(lce_engine* engine, uint32_t request_id, int64_t now_ms);
 
 /* --- Things that happen --- */
 

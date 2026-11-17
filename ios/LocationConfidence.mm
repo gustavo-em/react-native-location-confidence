@@ -117,7 +117,7 @@ static void (^rejecter(RCTPromiseRejectBlock reject))(NSString *, NSString *)
   [_bridge stopSession:sessionId resolve:resolve reject:rejecter(reject)];
 }
 
-// --- Evaluations ----------------------------------------------------------------
+// --- Requests ----------------------------------------------------------------
 
 - (void)evaluate:(NSString *)requestId
          request:(JS::NativeLocationConfidence::NativeEvaluateRequest &)request

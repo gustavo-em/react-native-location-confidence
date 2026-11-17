@@ -32,7 +32,7 @@
 // structs, so every struct crosses as a LIST OF NUMBERS (a DoubleArray):
 //
 //     Kotlin                         this file                    engine
-//     EvaluationSettings   --->   [0.0, 0.0, 100.0, ...]   --->   lce_evaluation_settings
+//     RequestSettings      --->   [0.0, 0.0, 100.0, ...]   --->   lce_request_settings
 //     Report               <---   [1.0, 0.0, 0.0, ...]     <---   lce_report
 //
 // The two sides agree on the ORDER of the numbers, and nothing else. This
@@ -73,7 +73,7 @@ constexpr double LAYOUT_CHECK = 7741.0;
 // exactly this many, in the order the read functions below use.
 constexpr jsize NUMBERS_IN_DEVICE_STATE = 6;
 constexpr jsize NUMBERS_IN_SESSION_SETTINGS = 3 + NUMBERS_IN_DEVICE_STATE;
-constexpr jsize NUMBERS_IN_EVALUATION_SETTINGS = 13 + NUMBERS_IN_DEVICE_STATE;
+constexpr jsize NUMBERS_IN_REQUEST_SETTINGS = 13 + NUMBERS_IN_DEVICE_STATE;
 constexpr jsize NUMBERS_IN_ONE_READING = 16;
 
 // --- Reading and writing lists of numbers ----------------------------------------
@@ -192,8 +192,8 @@ lce_session_settings readSessionSettings(NumberReader& reader) {
   return settings;
 }
 
-lce_evaluation_settings readEvaluationSettings(NumberReader& reader) {
-  lce_evaluation_settings settings{};
+lce_request_settings readRequestSettings(NumberReader& reader) {
+  lce_request_settings settings{};
   settings.destination_latitude = reader.number();
   settings.destination_longitude = reader.number();
   settings.radius_meters = reader.number();
@@ -346,35 +346,35 @@ jint nativeCloseSession(JNIEnv* /*env*/,
   return lce_close_session(toEngine(engine), static_cast<uint32_t>(sessionId), nowMs);
 }
 
-// Returns the request id (1, 2, 3...) when the evaluation was accepted, or
+// Returns the request id (1, 2, 3...) when the request was accepted, or
 // minus the error code of lce.h when it was not (for example -2 for
 // LCE_ERROR_INVALID_REQUEST).
-jlong nativeStartEvaluation(JNIEnv* env,
+jlong nativeStartRequest(JNIEnv* env,
                             jclass /*clazz*/,
                             jlong engine,
                             jint sessionId,
                             jdoubleArray settingsNumbers,
                             jlong nowMs) {
-  std::array<double, NUMBERS_IN_EVALUATION_SETTINGS> numbers{};
-  if (!copyFromKotlin(env, settingsNumbers, NUMBERS_IN_EVALUATION_SETTINGS, numbers.data())) {
+  std::array<double, NUMBERS_IN_REQUEST_SETTINGS> numbers{};
+  if (!copyFromKotlin(env, settingsNumbers, NUMBERS_IN_REQUEST_SETTINGS, numbers.data())) {
     return -static_cast<jlong>(LCE_ERROR_NULL_ARGUMENT);
   }
   NumberReader reader(numbers.data(), numbers.size());
-  const lce_evaluation_settings settings = readEvaluationSettings(reader);
+  const lce_request_settings settings = readRequestSettings(reader);
 
   uint32_t requestId = 0;
-  const int32_t answer = lce_start_evaluation(toEngine(engine), static_cast<uint32_t>(sessionId),
+  const int32_t answer = lce_start_request(toEngine(engine), static_cast<uint32_t>(sessionId),
                                               &settings, nowMs, &requestId);
 
   return answer == LCE_OK ? static_cast<jlong>(requestId) : -static_cast<jlong>(answer);
 }
 
-jint nativeCancelEvaluation(JNIEnv* /*env*/,
+jint nativeCancelRequest(JNIEnv* /*env*/,
                             jclass /*clazz*/,
                             jlong engine,
                             jint requestId,
                             jlong nowMs) {
-  return lce_cancel_evaluation(toEngine(engine), static_cast<uint32_t>(requestId), nowMs);
+  return lce_cancel_request(toEngine(engine), static_cast<uint32_t>(requestId), nowMs);
 }
 
 // `readingsNumbers` holds `howMany` readings, one after the other, each one
@@ -556,8 +556,8 @@ const JNINativeMethod NATIVE_METHODS[] = {
     {"nativeOpenSession", "(J[DJ)[D", reinterpret_cast<void*>(nativeOpenSession)},
     {"nativeClearSessionHistory", "(JI)I", reinterpret_cast<void*>(nativeClearSessionHistory)},
     {"nativeCloseSession", "(JIJ)I", reinterpret_cast<void*>(nativeCloseSession)},
-    {"nativeStartEvaluation", "(JI[DJ)J", reinterpret_cast<void*>(nativeStartEvaluation)},
-    {"nativeCancelEvaluation", "(JIJ)I", reinterpret_cast<void*>(nativeCancelEvaluation)},
+    {"nativeStartRequest", "(JI[DJ)J", reinterpret_cast<void*>(nativeStartRequest)},
+    {"nativeCancelRequest", "(JIJ)I", reinterpret_cast<void*>(nativeCancelRequest)},
     {"nativeReadingsArrived", "(J[DIJ)I", reinterpret_cast<void*>(nativeReadingsArrived)},
     {"nativePhoneActivityChanged", "(JIIJJ)I",
      reinterpret_cast<void*>(nativePhoneActivityChanged)},

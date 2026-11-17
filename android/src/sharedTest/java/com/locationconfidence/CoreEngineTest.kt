@@ -50,11 +50,11 @@ class CoreEngineTest {
    * values cross each bridge without being changed.
    */
   @Test
-  fun golden_scenario_one_evaluation_one_reading_every_field_of_the_report() {
+  fun golden_scenario_one_request_one_reading_every_field_of_the_report() {
     val device = phoneWhereEverythingWorks()
 
     // second 0: the app asks.
-    val started = engine.startEvaluation(0, usualEvaluation(), device, 0)
+    val started = engine.startRequest(0, usualRequest(), device, 0)
     assertNull(started.refusal)
     assertEquals(1, started.requestId)
 
@@ -128,8 +128,8 @@ class CoreEngineTest {
   }
 
   @Test
-  fun an_evaluation_that_times_out_carries_its_flags_its_steps_and_its_fallback_cause() {
-    engine.startEvaluation(0, usualEvaluation(), phoneWhereEverythingWorks(), 1000)
+  fun a_request_that_times_out_carries_its_flags_its_steps_and_its_fallback_cause() {
+    engine.startRequest(0, usualRequest(), phoneWhereEverythingWorks(), 1000)
     engine.timePassed(5500)
     engine.timePassed(12500)
 
@@ -157,18 +157,18 @@ class CoreEngineTest {
     val device = phoneWhereEverythingWorks()
 
     // A speed with its error makes the distance small: (0.3 + 2 x 0.5) x 1 + 1.25 = 2.55.
-    engine.startEvaluation(0, usualEvaluation(), device, 0)
+    engine.startRequest(0, usualRequest(), device, 0)
     val withSpeed = readingNorth(0, 20.0).copy(speedMps = 0.3, speedAccuracyMps = 0.5, headingDegrees = 90.0)
     engine.readingsArrived(listOf(withSpeed), 1000)
     assertEquals(8.0 + 2.55, engine.takeFinishedReport()!!.howFarPhoneCouldBeMeters, 1e-9)
 
     // No speed: the fastest speed is assumed, 8 + 45 = 53.
-    engine.startEvaluation(0, usualEvaluation(), device, 0)
+    engine.startRequest(0, usualRequest(), device, 0)
     engine.readingsArrived(listOf(readingNorth(0, 20.0)), 1000)
     assertEquals(53.0, engine.takeFinishedReport()!!.howFarPhoneCouldBeMeters, 0.0)
 
     // No GPS error: the reading is thrown away.
-    engine.startEvaluation(0, usualEvaluation(), device, 0)
+    engine.startRequest(0, usualRequest(), device, 0)
     engine.readingsArrived(listOf(readingNorth(0, 20.0).copy(accuracyMeters = null)), 1000)
     engine.timePassed(30000)
     val thrownAway = engine.takeFinishedReport()!!
@@ -176,7 +176,7 @@ class CoreEngineTest {
     assertTrue(thrownAway.reasons.contains("location_accuracy_unavailable"))
 
     // The marks: simulated, approximate, estimated time.
-    engine.startEvaluation(0, usualEvaluation(), device, 0)
+    engine.startRequest(0, usualRequest(), device, 0)
     val marked = readingNorth(0, 20.0).copy(
       mockSignal = MockSignal.FLAGGED,
       onlyApproximatePermission = true,
@@ -193,8 +193,8 @@ class CoreEngineTest {
 
   @Test
   fun a_long_delivery_crosses_in_one_call_and_every_reading_is_counted() {
-    val strict = usualEvaluation().copy(worstGpsErrorAcceptedMeters = 1.0) // keeps it running
-    engine.startEvaluation(0, strict, phoneWhereEverythingWorks(), 0)
+    val strict = usualRequest().copy(worstGpsErrorAcceptedMeters = 1.0) // keeps it running
+    engine.startRequest(0, strict, phoneWhereEverythingWorks(), 0)
 
     val readings = (0 until 40).map { readingNorth(it * 100L, 20.0) }
     engine.readingsArrived(readings, 4000)
@@ -209,7 +209,7 @@ class CoreEngineTest {
   @Test
   fun the_state_of_the_phone_crosses() {
     val denied = phoneWhereEverythingWorks().copy(locationPermission = LocationPermission.DENIED)
-    engine.startEvaluation(0, usualEvaluation(), denied, 0)
+    engine.startRequest(0, usualRequest(), denied, 0)
 
     val report = engine.takeFinishedReport()!!
     assertEquals(2, report.status)
@@ -255,7 +255,7 @@ class CoreEngineTest {
     engine.readingsArrived(listOf(readingNorth(0, 20.0, 5.0)), 0)
     engine.phoneActivityChanged(PhoneActivity.STANDING_STILL, ActivityConfidence.HIGH, 0, 500)
 
-    engine.startEvaluation(session.sessionId, usualEvaluation(), device, 10000)
+    engine.startRequest(session.sessionId, usualRequest(), device, 10000)
     engine.timePassed(14500)
 
     val report = engine.takeFinishedReport()!!
@@ -270,8 +270,8 @@ class CoreEngineTest {
 
   @Test
   fun a_request_that_makes_no_sense_is_refused() {
-    val broken = usualEvaluation().copy(destinationLatitude = 91.0)
-    val started = engine.startEvaluation(0, broken, phoneWhereEverythingWorks(), 0)
+    val broken = usualRequest().copy(destinationLatitude = 91.0)
+    val started = engine.startRequest(0, broken, phoneWhereEverythingWorks(), 0)
 
     assertEquals(StartRefusal.INVALID_REQUEST, started.refusal)
     assertNull(engine.takeFinishedReport())
@@ -283,7 +283,7 @@ class CoreEngineTest {
     // "simulated_location_source" is reason number 43: it travels in the
     // upper half of the 64 bits.
     engine.setReadingsAreSimulated(true)
-    engine.startEvaluation(0, usualEvaluation(), phoneWhereEverythingWorks(), 0)
+    engine.startRequest(0, usualRequest(), phoneWhereEverythingWorks(), 0)
     engine.readingsArrived(listOf(readingNorth(0, 20.0)), 1000)
 
     val report = engine.takeFinishedReport()!!
@@ -292,11 +292,11 @@ class CoreEngineTest {
   }
 
   @Test
-  fun CON_025_a_thousand_evaluations_through_JNI_leave_nothing_behind() {
+  fun CON_025_a_thousand_requests_through_JNI_leave_nothing_behind() {
     val device = phoneWhereEverythingWorks()
     for (round in 0 until 1000) {
       val now = round * 20000L
-      engine.startEvaluation(0, usualEvaluation(), device, now)
+      engine.startRequest(0, usualRequest(), device, now)
       engine.readingsArrived(listOf(readingNorth(now, 20.0)), now + 1000)
       assertNotNull(engine.takeFinishedReport())
       assertNull(engine.takeFinishedReport())
@@ -312,6 +312,6 @@ class CoreEngineTest {
     engine.timePassed(1000)
     assertNull(engine.takeFinishedReport())
     assertFalse(engine.whatThePlatformMustDoNow().locationUpdatesAreWanted)
-    assertEquals(StartRefusal.ENGINE_IS_FULL, engine.startEvaluation(0, usualEvaluation(), phoneWhereEverythingWorks(), 0).refusal)
+    assertEquals(StartRefusal.ENGINE_IS_FULL, engine.startRequest(0, usualRequest(), phoneWhereEverythingWorks(), 0).refusal)
   }
 }

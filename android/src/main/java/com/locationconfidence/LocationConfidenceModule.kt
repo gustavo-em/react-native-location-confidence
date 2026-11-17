@@ -26,7 +26,7 @@ import com.locationconfidence.core.CoreEngine
 import com.locationconfidence.core.NativeCore
 import com.locationconfidence.models.ActivityConfidence
 import com.locationconfidence.models.CollectingState
-import com.locationconfidence.models.EvaluationSettings
+import com.locationconfidence.models.RequestSettings
 import com.locationconfidence.models.LocationProviderState
 import com.locationconfidence.models.MockPolicy
 import com.locationconfidence.models.MockSignal
@@ -250,7 +250,7 @@ class LocationConfidenceModule(reactContext: ReactApplicationContext) :
     coordinator.closeSession(toSessionNumber(sessionId)) { promise.resolve(null) }
   }
 
-  // --- Evaluations -----------------------------------------------------------
+  // --- Requests -----------------------------------------------------------
 
   override fun evaluate(requestId: String, request: ReadableMap, promise: Promise) {
     val coordinator = coordinatorOrReject(promise) ?: return
@@ -258,7 +258,7 @@ class LocationConfidenceModule(reactContext: ReactApplicationContext) :
     val sessionIdFromTheApp: String? =
       if (request.isNull("sessionId")) null else request.getString("sessionId")
 
-    val settings = EvaluationSettings(
+    val settings = RequestSettings(
       destinationLatitude = request.getDouble("latitude"),
       destinationLongitude = request.getDouble("longitude"),
       radiusMeters = request.getDouble("radiusMeters"),
@@ -281,7 +281,7 @@ class LocationConfidenceModule(reactContext: ReactApplicationContext) :
     // No session: the engine's number for that is 0.
     val sessionNumber = if (sessionIdFromTheApp == null) 0 else toSessionNumber(sessionIdFromTheApp)
 
-    coordinator.evaluate(
+    coordinator.startRequest(
       idGivenByTheApp = requestId,
       sessionId = sessionNumber,
       settings = settings,
@@ -291,7 +291,7 @@ class LocationConfidenceModule(reactContext: ReactApplicationContext) :
           StartRefusal.INVALID_REQUEST ->
             promise.reject("invalid_argument", "The destination or the radius is not valid")
           StartRefusal.ENGINE_IS_FULL ->
-            promise.reject("native_internal_error", "The engine could not take one more evaluation")
+            promise.reject("native_internal_error", "The engine could not take one more request")
         }
       },
     )

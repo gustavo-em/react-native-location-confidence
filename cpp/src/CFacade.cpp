@@ -15,7 +15,7 @@
 // THE ORDER OF THE CALLS IN THIS FILE
 // =============================================================================
 //
-//   lce_start_evaluation(engine, session_id, settings, now_ms, request_id)
+//   lce_start_request(engine, session_id, settings, now_ms, request_id)
 //     |-- toRequestSettings()             C struct  ->  C++ struct
 //     |      `-- toDeviceState()
 //     `-- engine->engine.startRequest()                    (Engine.cpp)
@@ -249,7 +249,7 @@ SessionSettings toSessionSettings(const lce_session_settings& settings) noexcept
   return result;
 }
 
-RequestSettings toRequestSettings(const lce_evaluation_settings& settings) noexcept {
+RequestSettings toRequestSettings(const lce_request_settings& settings) noexcept {
   RequestSettings result;
 
   result.asked.destination.latitudeDegrees = settings.destination_latitude;
@@ -457,9 +457,9 @@ extern "C" int32_t lce_close_session(lce_engine* engine, uint32_t session_id, in
 
 // --- Requests -------------------------------------------------------------
 
-extern "C" int32_t lce_start_evaluation(lce_engine* engine,
+extern "C" int32_t lce_start_request(lce_engine* engine,
                                         uint32_t session_id,
-                                        const lce_evaluation_settings* settings,
+                                        const lce_request_settings* settings,
                                         int64_t now_ms,
                                         uint32_t* request_id) {
   if (engine == nullptr || settings == nullptr || request_id == nullptr) {
@@ -480,7 +480,7 @@ extern "C" int32_t lce_start_evaluation(lce_engine* engine,
   return answer;
 }
 
-extern "C" int32_t lce_cancel_evaluation(lce_engine* engine,
+extern "C" int32_t lce_cancel_request(lce_engine* engine,
                                          uint32_t request_id,
                                          int64_t now_ms) {
   if (engine == nullptr) {

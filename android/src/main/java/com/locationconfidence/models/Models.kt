@@ -101,8 +101,8 @@ data class SessionSettings(
   val longestCollectingTimeMs: Long,
 )
 
-/** What the app asked for in one evaluation. */
-data class EvaluationSettings(
+/** What the app asked for in one request. */
+data class RequestSettings(
   val destinationLatitude: Double,
   val destinationLongitude: Double,
   val radiusMeters: Double,
@@ -159,7 +159,7 @@ data class PlatformWork(
 )
 
 /**
- * The final report of one evaluation.
+ * The final report of one request.
  *
  * The fields that are a choice from a list (status, source...) stay as the
  * engine's numbers here. The JavaScript side turns them into their public

@@ -46,8 +46,8 @@ internal object NativeCore {
   @JvmStatic external fun nativeCloseSession(engine: Long, sessionId: Int, nowMs: Long): Int
 
   /** Returns the request id, or minus an error code of lce.h. */
-  @JvmStatic external fun nativeStartEvaluation(engine: Long, sessionId: Int, settings: DoubleArray, nowMs: Long): Long
-  @JvmStatic external fun nativeCancelEvaluation(engine: Long, requestId: Int, nowMs: Long): Int
+  @JvmStatic external fun nativeStartRequest(engine: Long, sessionId: Int, settings: DoubleArray, nowMs: Long): Long
+  @JvmStatic external fun nativeCancelRequest(engine: Long, requestId: Int, nowMs: Long): Int
 
   @JvmStatic external fun nativeReadingsArrived(engine: Long, readings: DoubleArray, howMany: Int, nowMs: Long): Int
   @JvmStatic external fun nativePhoneActivityChanged(engine: Long, activity: Int, confidence: Int, sinceMs: Long, nowMs: Long): Int

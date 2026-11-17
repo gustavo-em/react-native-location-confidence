@@ -24,12 +24,12 @@ final class CoreEngineTests: XCTestCase {
     XCTAssertEqual(CoreEngine.versionThisCodeExpects, 2)
   }
 
-  func test_golden_scenario_one_evaluation_one_reading_every_field_of_the_report() {
+  func test_golden_scenario_one_request_one_reading_every_field_of_the_report() {
     let device = phoneWhereEverythingWorks()
 
     // second 0: the app asks.
-    let started = engine.startEvaluation(
-      sessionId: 0, settings: usualEvaluation(), device: device, nowMs: 0)
+    let started = engine.startRequest(
+      sessionId: 0, settings: usualRequest(), device: device, nowMs: 0)
     XCTAssertNil(started.refusal)
     XCTAssertEqual(started.requestId, 1)
 
@@ -105,9 +105,9 @@ final class CoreEngineTests: XCTestCase {
     XCTAssertFalse(after.wakeUpIsWanted)
   }
 
-  func test_an_evaluation_that_times_out_carries_its_flags_its_steps_and_its_fallback_cause() {
-    _ = engine.startEvaluation(
-      sessionId: 0, settings: usualEvaluation(), device: phoneWhereEverythingWorks(), nowMs: 1000)
+  func test_a_request_that_times_out_carries_its_flags_its_steps_and_its_fallback_cause() {
+    _ = engine.startRequest(
+      sessionId: 0, settings: usualRequest(), device: phoneWhereEverythingWorks(), nowMs: 1000)
     engine.timePassed(nowMs: 5500)
     engine.timePassed(nowMs: 12500)
 
@@ -139,7 +139,7 @@ final class CoreEngineTests: XCTestCase {
     let device = phoneWhereEverythingWorks()
 
     // A speed with its error makes the distance small: (0.3 + 2 x 0.5) x 1 + 1.25 = 2.55.
-    _ = engine.startEvaluation(sessionId: 0, settings: usualEvaluation(), device: device, nowMs: 0)
+    _ = engine.startRequest(sessionId: 0, settings: usualRequest(), device: device, nowMs: 0)
     var withSpeed = readingNorth(0, 20.0)
     withSpeed.speedMps = 0.3
     withSpeed.speedAccuracyMps = 0.5
@@ -149,12 +149,12 @@ final class CoreEngineTests: XCTestCase {
       engine.takeFinishedReport()?.howFarPhoneCouldBeMeters ?? -1, 8.0 + 2.55, accuracy: 1e-9)
 
     // No speed: the fastest speed is assumed, 8 + 45 = 53.
-    _ = engine.startEvaluation(sessionId: 0, settings: usualEvaluation(), device: device, nowMs: 0)
+    _ = engine.startRequest(sessionId: 0, settings: usualRequest(), device: device, nowMs: 0)
     engine.readingsArrived([readingNorth(0, 20.0)], nowMs: 1000)
     XCTAssertEqual(engine.takeFinishedReport()?.howFarPhoneCouldBeMeters, 53.0)
 
     // No GPS error: the reading is thrown away.
-    _ = engine.startEvaluation(sessionId: 0, settings: usualEvaluation(), device: device, nowMs: 0)
+    _ = engine.startRequest(sessionId: 0, settings: usualRequest(), device: device, nowMs: 0)
     var withoutAccuracy = readingNorth(0, 20.0)
     withoutAccuracy.accuracyMeters = nil
     engine.readingsArrived([withoutAccuracy], nowMs: 1000)
@@ -166,7 +166,7 @@ final class CoreEngineTests: XCTestCase {
     XCTAssertTrue(thrownAway.reasons.contains("location_accuracy_unavailable"))
 
     // The marks: simulated, approximate, estimated time.
-    _ = engine.startEvaluation(sessionId: 0, settings: usualEvaluation(), device: device, nowMs: 0)
+    _ = engine.startRequest(sessionId: 0, settings: usualRequest(), device: device, nowMs: 0)
     var marked = readingNorth(0, 20.0)
     marked.mockSignal = .flagged
     marked.onlyApproximatePermission = true
@@ -184,9 +184,9 @@ final class CoreEngineTests: XCTestCase {
   }
 
   func test_a_long_delivery_crosses_in_one_call_and_every_reading_is_counted() {
-    var strict = usualEvaluation()
+    var strict = usualRequest()
     strict.worstGpsErrorAcceptedMeters = 1.0  // keeps it running
-    _ = engine.startEvaluation(
+    _ = engine.startRequest(
       sessionId: 0, settings: strict, device: phoneWhereEverythingWorks(), nowMs: 0)
 
     let readings = (0..<40).map { readingNorth(Int64($0) * 100, 20.0) }
@@ -204,7 +204,7 @@ final class CoreEngineTests: XCTestCase {
   func test_the_state_of_the_phone_crosses() {
     var denied = phoneWhereEverythingWorks()
     denied.locationPermission = .denied
-    _ = engine.startEvaluation(sessionId: 0, settings: usualEvaluation(), device: denied, nowMs: 0)
+    _ = engine.startRequest(sessionId: 0, settings: usualRequest(), device: denied, nowMs: 0)
 
     guard let report = engine.takeFinishedReport() else {
       return XCTFail("no report")
@@ -252,8 +252,8 @@ final class CoreEngineTests: XCTestCase {
     engine.readingsArrived([readingNorth(0, 20.0, 5.0)], nowMs: 0)
     engine.phoneActivityChanged(.standingStill, confidence: .high, sinceMs: 0, nowMs: 500)
 
-    _ = engine.startEvaluation(
-      sessionId: session.sessionId, settings: usualEvaluation(), device: device, nowMs: 10000)
+    _ = engine.startRequest(
+      sessionId: session.sessionId, settings: usualRequest(), device: device, nowMs: 10000)
     engine.timePassed(nowMs: 14500)
 
     guard let report = engine.takeFinishedReport() else {
@@ -269,9 +269,9 @@ final class CoreEngineTests: XCTestCase {
   }
 
   func test_a_request_that_makes_no_sense_is_refused() {
-    var broken = usualEvaluation()
+    var broken = usualRequest()
     broken.destinationLatitude = 91.0
-    let started = engine.startEvaluation(
+    let started = engine.startRequest(
       sessionId: 0, settings: broken, device: phoneWhereEverythingWorks(), nowMs: 0)
 
     XCTAssertEqual(started.refusal, .invalidRequest)
@@ -281,8 +281,8 @@ final class CoreEngineTests: XCTestCase {
 
   func test_a_session_number_that_cannot_exist_is_answered_as_an_unknown_session() {
     for sessionId in [99, -1] {
-      let started = engine.startEvaluation(
-        sessionId: sessionId, settings: usualEvaluation(), device: phoneWhereEverythingWorks(),
+      let started = engine.startRequest(
+        sessionId: sessionId, settings: usualRequest(), device: phoneWhereEverythingWorks(),
         nowMs: 0)
       XCTAssertNil(started.refusal)
 
@@ -299,8 +299,8 @@ final class CoreEngineTests: XCTestCase {
     // "simulated_location_source" is reason number 43: it sits in the upper
     // half of the 64 bits.
     engine.setReadingsAreSimulated(true)
-    _ = engine.startEvaluation(
-      sessionId: 0, settings: usualEvaluation(), device: phoneWhereEverythingWorks(), nowMs: 0)
+    _ = engine.startRequest(
+      sessionId: 0, settings: usualRequest(), device: phoneWhereEverythingWorks(), nowMs: 0)
     engine.readingsArrived([readingNorth(0, 20.0)], nowMs: 1000)
 
     guard let report = engine.takeFinishedReport() else {
@@ -310,12 +310,12 @@ final class CoreEngineTests: XCTestCase {
     XCTAssertTrue(report.reasons.contains("uncertainty_model_heuristic"))
   }
 
-  func test_CON_025_a_thousand_evaluations_leave_nothing_behind() {
+  func test_CON_025_a_thousand_requests_leave_nothing_behind() {
     let device = phoneWhereEverythingWorks()
     for round in 0..<1000 {
       let now = Int64(round) * 20000
-      _ = engine.startEvaluation(
-        sessionId: 0, settings: usualEvaluation(), device: device, nowMs: now)
+      _ = engine.startRequest(
+        sessionId: 0, settings: usualRequest(), device: device, nowMs: now)
       engine.readingsArrived([readingNorth(now, 20.0)], nowMs: now + 1000)
       XCTAssertNotNil(engine.takeFinishedReport())
       XCTAssertNil(engine.takeFinishedReport())
@@ -330,8 +330,8 @@ final class CoreEngineTests: XCTestCase {
     engine.timePassed(nowMs: 1000)
     XCTAssertNil(engine.takeFinishedReport())
     XCTAssertFalse(engine.whatThePlatformMustDoNow().locationUpdatesAreWanted)
-    let started = engine.startEvaluation(
-      sessionId: 0, settings: usualEvaluation(), device: phoneWhereEverythingWorks(), nowMs: 0)
+    let started = engine.startRequest(
+      sessionId: 0, settings: usualRequest(), device: phoneWhereEverythingWorks(), nowMs: 0)
     XCTAssertEqual(started.refusal, .engineIsFull)
   }
 }

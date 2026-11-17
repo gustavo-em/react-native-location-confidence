@@ -2,7 +2,7 @@ package com.locationconfidence.ports
 
 import com.locationconfidence.models.ActivityConfidence
 import com.locationconfidence.models.DeviceState
-import com.locationconfidence.models.EvaluationSettings
+import com.locationconfidence.models.RequestSettings
 import com.locationconfidence.models.PhoneActivity
 import com.locationconfidence.models.PlatformWork
 import com.locationconfidence.models.Reading
@@ -81,17 +81,17 @@ fun interface DeviceStateSource {
   fun currentDeviceState(): DeviceState
 }
 
-/** What can go wrong when an evaluation is started. */
+/** What can go wrong when a request is started. */
 enum class StartRefusal {
   /** The address or the radius makes no sense. */
   INVALID_REQUEST,
 
-  /** The engine could not take one more evaluation. */
+  /** The engine could not take one more request. */
   ENGINE_IS_FULL,
 }
 
-/** The answer to "start an evaluation": an id, or why it was refused. */
-data class EvaluationStart(val requestId: Int, val refusal: StartRefusal?)
+/** The answer to "start a request": an id, or why it was refused. */
+data class RequestStart(val requestId: Int, val refusal: StartRefusal?)
 
 /**
  * The engine, seen from Kotlin. One function for each function of lce.h.
@@ -102,8 +102,8 @@ interface CoreEnginePort {
   fun clearSessionHistory(sessionId: Int): Boolean
   fun closeSession(sessionId: Int, nowMs: Long)
 
-  fun startEvaluation(sessionId: Int, settings: EvaluationSettings, device: DeviceState, nowMs: Long): EvaluationStart
-  fun cancelEvaluation(requestId: Int, nowMs: Long)
+  fun startRequest(sessionId: Int, settings: RequestSettings, device: DeviceState, nowMs: Long): RequestStart
+  fun cancelRequest(requestId: Int, nowMs: Long)
 
   fun readingsArrived(readings: List<Reading>, nowMs: Long)
   fun phoneActivityChanged(activity: PhoneActivity, confidence: ActivityConfidence, sinceMs: Long, nowMs: Long)

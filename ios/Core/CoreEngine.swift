@@ -96,12 +96,12 @@ final class CoreEngine: CoreEnginePort {
     _ = lce_close_session(engine, id, nowMs)
   }
 
-  // MARK: Evaluations
+  // MARK: Requests
 
-  func startEvaluation(
-    sessionId: Int, settings: EvaluationSettings, device: DeviceState, nowMs: Int64
-  ) -> EvaluationStart {
-    var cSettings = lce_evaluation_settings()
+  func startRequest(
+    sessionId: Int, settings: RequestSettings, device: DeviceState, nowMs: Int64
+  ) -> RequestStart {
+    var cSettings = lce_request_settings()
     cSettings.destination_latitude = settings.destinationLatitude
     cSettings.destination_longitude = settings.destinationLongitude
     cSettings.radius_meters = settings.radiusMeters
@@ -122,22 +122,22 @@ final class CoreEngine: CoreEnginePort {
     let sessionNumber = UInt32(exactly: sessionId) ?? UInt32.max
 
     var requestId: UInt32 = 0
-    let result = lce_start_evaluation(engine, sessionNumber, &cSettings, nowMs, &requestId)
+    let result = lce_start_request(engine, sessionNumber, &cSettings, nowMs, &requestId)
 
     if result == LCE_OK {
-      return EvaluationStart(requestId: Int(requestId), refusal: nil)
+      return RequestStart(requestId: Int(requestId), refusal: nil)
     } else if result == LCE_ERROR_INVALID_REQUEST {
-      return EvaluationStart(requestId: 0, refusal: .invalidRequest)
+      return RequestStart(requestId: 0, refusal: .invalidRequest)
     } else {
-      return EvaluationStart(requestId: 0, refusal: .engineIsFull)
+      return RequestStart(requestId: 0, refusal: .engineIsFull)
     }
   }
 
-  func cancelEvaluation(_ requestId: Int, nowMs: Int64) {
+  func cancelRequest(_ requestId: Int, nowMs: Int64) {
     guard let id = UInt32(exactly: requestId) else {
       return
     }
-    _ = lce_cancel_evaluation(engine, id, nowMs)
+    _ = lce_cancel_request(engine, id, nowMs)
   }
 
   // MARK: Things that happen

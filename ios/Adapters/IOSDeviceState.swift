@@ -105,7 +105,7 @@ final class IOSDeviceState: NSObject, DeviceStateSource, CLLocationManagerDelega
   /// Can the phone report its activity, and did the user allow it?
   ///
   /// The answer is "available" only when the permission ALREADY exists. That
-  /// is what keeps an evaluation from showing a permission dialog: the engine
+  /// is what keeps a request from showing a permission dialog: the engine
   /// only asks for activity reports when it is told they are available.
   static func phoneActivitySupport() -> PhoneActivitySupport {
     // Without this text in Info.plist, touching the sensor crashes the app.
