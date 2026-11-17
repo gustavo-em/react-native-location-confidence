@@ -22,6 +22,17 @@ Pod::Spec.new do |s|
     "cpp/src/**/*.{h,hpp,cpp}",
   ]
 
+  # The Swift unit tests run on a Mac with `swift test` (see Package.swift).
+  # They are not part of the library.
+  s.exclude_files = "ios/Tests/**/*"
+
+  # Tells Apple what the library does with data: nothing leaves the device.
+  s.resource_bundles = {
+    "LocationConfidencePrivacy" => ["ios/PrivacyInfo.xcprivacy"],
+  }
+
+  s.frameworks = "CoreLocation", "CoreMotion"
+
   # lce.h is plain C and is the only header Swift needs to see, so it is the
   # only public header. Everything under ios/ imports C++ (Codegen spec) and
   # must stay private, otherwise the module would not be importable.
