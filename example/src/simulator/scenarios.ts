@@ -160,6 +160,10 @@ const gpsJump: Scenario = {
   metersAcrossTheMap: 700,
   lengthSeconds: 19,
   momentAt(second) {
+    const captionOfTheJump =
+      'The courier has not moved, but one reading lands 340 m away ' +
+      '(the red dot). Nobody travels that far in one second.';
+
     if (second === SECOND_OF_THE_JUMP) {
       return {
         courier: PARKING_SPOT,
@@ -170,10 +174,13 @@ const gpsJump: Scenario = {
             look: 'wrong',
           },
         ],
-        caption:
-          'The courier has not moved, but one reading lands 340 m away ' +
-          '(the red dot). Nobody travels that far in one second.',
+        caption: captionOfTheJump,
       };
+    }
+
+    // A glitch is often followed by a moment with no reading at all.
+    if (second === SECOND_OF_THE_JUMP + 1) {
+      return { courier: PARKING_SPOT, readings: [], caption: captionOfTheJump };
     }
 
     let caption: string;

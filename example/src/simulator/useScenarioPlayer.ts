@@ -21,11 +21,12 @@ import { ADDRESS, toCoordinates } from './world';
 
 /**
  * Short waits, so the screen follows the scenario closely: an evaluation
- * waits at most 0.8 s for a reading and then answers with what it remembers.
+ * waits at most half a second for a reading and then answers with what it
+ * remembers.
  */
 const EVALUATION_OPTIONS = {
   totalDeadlineMs: 1000,
-  initialFixBudgetMs: 800,
+  initialFixBudgetMs: 500,
   recoveryWindowMs: 0,
 } as const;
 
