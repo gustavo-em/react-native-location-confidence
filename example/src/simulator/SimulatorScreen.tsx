@@ -1,5 +1,6 @@
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { ReportPanel } from '../components/ReportPanel';
+import { useTexts } from '../i18n/LanguageContext';
 import { colors, fonts } from '../theme';
 import { SCENARIOS } from './scenarios';
 import { MapLegend, StreetMap } from './StreetMap';
@@ -12,11 +13,23 @@ import { useScenarioPlayer } from './useScenarioPlayer';
  * simulation is doing; the panel under it shows what the library answers.
  */
 export function SimulatorScreen() {
+  const texts = useTexts();
   const { state, play } = useScenarioPlayer();
   const { scenario, moment } = state;
 
   const partPlayed =
     scenario === null ? 0 : (state.second + 1) / scenario.lengthSeconds;
+
+  // What is written under the map: a problem, if there is one; otherwise
+  // what the scenario is doing; before any scenario, what to do.
+  let underTheMap: string;
+  if (state.problem !== null) {
+    underTheMap = state.problem;
+  } else if (moment !== null) {
+    underTheMap = texts.simulator.captions[moment.caption];
+  } else {
+    underTheMap = texts.simulator.pickASituation;
+  }
 
   return (
     <ScrollView
@@ -49,7 +62,7 @@ export function SimulatorScreen() {
                   isTheOnePlaying && styles.scenarioTextPicked,
                 ]}
               >
-                {candidate.title}
+                {texts.simulator.scenarioTitles[candidate.id]}
               </Text>
             </Pressable>
           );
@@ -71,17 +84,12 @@ export function SimulatorScreen() {
       </View>
       <MapLegend />
 
-      <Text style={styles.caption}>
-        {state.problem ??
-          moment?.caption ??
-          'Pick a situation above. Every coordinate here is made up: the ' +
-            'real GPS stays off and no permission is needed.'}
-      </Text>
+      <Text style={styles.caption}>{underTheMap}</Text>
 
       <ReportPanel
         report={state.report}
         answers={state.answers}
-        whenEmpty="The library's answer shows up here, once per second."
+        whenEmpty={texts.simulator.answerShowsUpHere}
       />
     </ScrollView>
   );

@@ -1,0 +1,8 @@
+/*
+ * What the system shows when the example asks for a permission, in
+ * Portuguese. See en.lproj/InfoPlist.strings for why these two folders exist.
+ */
+
+"NSLocationWhenInUseUsageDescription" = "O exemplo lê sua localização só quando você pede um relatório, ou enquanto uma sessão aberta por você continua coletando, para mostrar quão boa é a evidência de localização para um endereço de entrega. Nada é guardado nem enviado.";
+
+"NSMotionUsageDescription" = "O exemplo usa o que o celular informa sobre o próprio movimento (parado, andando) para dizer se uma localização mais antiga ainda é útil.";

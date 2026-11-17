@@ -1,12 +1,15 @@
 import { StyleSheet, Text, View } from 'react-native';
 import type { ProximityReport } from 'react-native-location-confidence';
+import { useTexts } from '../i18n/LanguageContext';
+import type { LimitName, ReasonName, Texts } from '../i18n/texts';
 import { colorOfRelation, colors, fonts } from '../theme';
 
 /*
  * Shows one report of the library in words a person can read.
  *
  * Nothing here is computed about locations: every number and every label
- * comes from the report. This file only chooses the words.
+ * comes from the report. This file only chooses which sentence to show;
+ * the sentences themselves, in each language, are in i18n/texts.ts.
  */
 
 type Props = Readonly<{
@@ -17,112 +20,87 @@ type Props = Readonly<{
   whenEmpty: string;
 }>;
 
-function whatTheEvidenceSays(report: ProximityReport): string {
+function whatTheEvidenceSays(report: ProximityReport, texts: Texts): string {
   if (report.status === 'cancelled') {
-    return 'Request cancelled';
+    return texts.report.requestCancelled;
   } else if (report.measuredPosition === null) {
-    return 'No reading to judge';
+    return texts.report.noReadingToJudge;
   } else if (report.evidenceRelation === 'supports_inside') {
-    return 'Evidence supports inside the radius';
+    return texts.report.supportsInside;
   } else if (report.evidenceRelation === 'supports_outside') {
-    return 'Evidence supports outside the radius';
+    return texts.report.supportsOutside;
   } else {
-    return 'Evidence cannot take a side';
+    return texts.report.cannotTakeASide;
   }
 }
 
 /**
- * The limits the score model applied, in plain words. The most serious one
- * comes first, and only that one is shown.
+ * The limits of the score model that get a sentence. The most serious one
+ * comes first, and only the first one that applied is shown.
  */
-const LIMITS_IN_PLAIN_WORDS: ReadonlyArray<readonly [string, string]> = [
-  ['mock_location', 'The system marked this reading as mock.'],
-  ['suspected_jump', 'This reading looks like a GPS jump.'],
-  ['approximate_permission', 'Only the approximate location is allowed.'],
-  [
-    'uncertainty_at_least_300m',
-    'By now the phone could be 300 m or more from the reading.',
-  ],
-  [
-    'uncertainty_at_least_100m',
-    'By now the phone could be 100 m or more from the reading.',
-  ],
-  [
-    'unknown_movement_not_fresh',
-    'An old reading, and nothing tells whether the phone moved since.',
-  ],
-  ['cached', 'No new reading arrived: this one comes from memory.'],
-  ['conflicting_evidence', 'A remembered reading contradicts the others.'],
-  ['single_fix', 'A single reading: nothing confirms it yet.'],
+const LIMITS_BY_SERIOUSNESS: readonly LimitName[] = [
+  'mock_location',
+  'suspected_jump',
+  'approximate_permission',
+  'uncertainty_at_least_300m',
+  'uncertainty_at_least_100m',
+  'unknown_movement_not_fresh',
+  'cached',
+  'conflicting_evidence',
+  'single_fix',
 ];
 
-/** The reasons of a report that has no reading, in plain words. */
-const REASONS_IN_PLAIN_WORDS: ReadonlyArray<readonly [string, string]> = [
-  ['request_cancelled', 'The app cancelled the request.'],
-  ['app_backgrounded', 'The app left the screen.'],
-  ['permission_not_determined', 'The location permission was never asked.'],
-  ['permission_denied', 'The location permission is denied.'],
-  ['permission_restricted', 'The location is blocked on this device.'],
-  ['location_services_disabled', 'Location is turned off on this phone.'],
-  ['play_services_unavailable', 'Google Play services are not available.'],
-  ['native_provider_unavailable', 'The location service failed.'],
-  ['unknown_session', 'That session is not open.'],
-  ['busy', 'Too many requests are running.'],
-  ['no_usable_fix', 'No usable reading arrived in time.'],
+/** The reasons of a report that has no reading, in the order they are tried. */
+const REASONS_WITH_NO_READING: readonly ReasonName[] = [
+  'request_cancelled',
+  'app_backgrounded',
+  'permission_not_determined',
+  'permission_denied',
+  'permission_restricted',
+  'location_services_disabled',
+  'play_services_unavailable',
+  'native_provider_unavailable',
+  'unknown_session',
+  'busy',
+  'no_usable_fix',
 ];
 
-function whyInPlainWords(report: ProximityReport): string {
-  const limits = report.scoreBreakdown?.appliedCaps ?? [];
-  for (const [limit, words] of LIMITS_IN_PLAIN_WORDS) {
-    if (limits.includes(limit)) {
-      return words;
+function whyInPlainWords(report: ProximityReport, texts: Texts): string {
+  const limitsApplied = report.scoreBreakdown?.appliedCaps ?? [];
+  for (const limit of LIMITS_BY_SERIOUSNESS) {
+    if (limitsApplied.includes(limit)) {
+      return texts.report.limits[limit];
     }
   }
-  for (const [reason, words] of REASONS_IN_PLAIN_WORDS) {
+  for (const reason of REASONS_WITH_NO_READING) {
     if (report.diagnostics.reasonCodes.includes(reason)) {
-      return words;
+      return texts.report.reasons[reason];
     }
   }
   if (report.measuredPosition === null) {
     return '';
   } else if (report.evidenceRelation === 'inconclusive') {
-    return 'The phone could be on either side of the radius line.';
+    return texts.report.eitherSideOfTheLine;
   } else {
-    return 'Recent readings agree with each other.';
+    return texts.report.readingsAgree;
   }
 }
 
-function meters(value: number): string {
-  return `${Math.round(value)} m`;
-}
-
-function seconds(milliseconds: number): string {
-  return `${(milliseconds / 1000).toFixed(1)} s`;
-}
-
-const WHERE_THE_READING_CAME_FROM = {
-  fresh: 'obtained by this request',
-  recovered: 'obtained in the extra time',
-  cached: 'taken from memory',
-  unavailable: 'missing',
-} as const;
-
-function theFacts(report: ProximityReport): string {
+function theFacts(report: ProximityReport, texts: Texts): string {
   const hasAReading =
     report.distanceMeters !== null &&
     report.effectiveUncertaintyMeters !== null &&
     report.locationAgeMs !== null;
   if (!hasAReading) {
-    return `Status ${report.status}.`;
+    return texts.report.statusAlone(report.status);
   }
-  return (
-    `Reading ${WHERE_THE_READING_CAME_FROM[report.source]}, ` +
-    `${seconds(report.locationAgeMs ?? 0)} old: ` +
-    `${meters(report.distanceMeters ?? 0)} from the address, and the ` +
-    `phone could be up to ` +
-    `${meters(report.effectiveUncertaintyMeters ?? 0)} from it. ` +
-    `Status ${report.status}.`
-  );
+  return texts.report.facts({
+    source: report.source,
+    ageMs: report.locationAgeMs ?? 0,
+    distanceMeters: report.distanceMeters ?? 0,
+    couldBeOffMeters: report.effectiveUncertaintyMeters ?? 0,
+    status: report.status,
+  });
 }
 
 /**
@@ -130,15 +108,22 @@ function theFacts(report: ProximityReport): string {
  * the score model lowered it, a notch marks where it was before the limits.
  */
 function IndexRuler({ report }: { report: ProximityReport }) {
+  const texts = useTexts();
   const index = report.qualityScore;
   const beforeLimits = report.scoreBreakdown?.rawScore ?? index;
   const wasLowered = beforeLimits > index;
   const limits = report.scoreBreakdown?.appliedCaps ?? [];
 
+  // The names of the limits stay as the library writes them ("single_fix").
+  const caption = wasLowered
+    ? `${texts.report.indexCaption} ` +
+      texts.report.wasBeforeTheLimits(beforeLimits, limits.join(', '))
+    : texts.report.indexCaption;
+
   return (
     <View
       accessible
-      accessibilityLabel={`Quality index ${index} out of 100. It is not a percentage.`}
+      accessibilityLabel={texts.report.indexForScreenReaders(index)}
     >
       <View style={styles.indexRow}>
         <Text style={styles.index}>{index}</Text>
@@ -158,23 +143,22 @@ function IndexRuler({ report }: { report: ProximityReport }) {
           </View>
         </View>
       </View>
-      <Text style={styles.indexCaption}>
-        Evidence quality index, 0 to 100. Not a percentage.
-        {wasLowered
-          ? ` Was ${beforeLimits} before the limits: ${limits.join(', ')}.`
-          : ''}
-      </Text>
+      <Text style={styles.indexCaption}>{caption}</Text>
     </View>
   );
 }
 
 /** The earlier answers as bars: height is the index, color is the side. */
 function AnswerStrip({ answers }: { answers: readonly ProximityReport[] }) {
+  const texts = useTexts();
+
   return (
     <View
       style={styles.strip}
       accessible
-      accessibilityLabel={`The last ${answers.length} answers`}
+      accessibilityLabel={texts.report.lastAnswersForScreenReaders(
+        answers.length
+      )}
     >
       {answers.map((answer) => (
         <View
@@ -193,6 +177,8 @@ function AnswerStrip({ answers }: { answers: readonly ProximityReport[] }) {
 }
 
 export function ReportPanel({ report, answers, whenEmpty }: Props) {
+  const texts = useTexts();
+
   if (report === null) {
     return <Text style={styles.empty}>{whenEmpty}</Text>;
   }
@@ -212,10 +198,10 @@ export function ReportPanel({ report, answers, whenEmpty }: Props) {
           { color: colorOfRelation(report.evidenceRelation) },
         ]}
       >
-        {whatTheEvidenceSays(report)}
+        {whatTheEvidenceSays(report, texts)}
       </Text>
-      <Text style={styles.why}>{whyInPlainWords(report)}</Text>
-      <Text style={styles.facts}>{theFacts(report)}</Text>
+      <Text style={styles.why}>{whyInPlainWords(report, texts)}</Text>
+      <Text style={styles.facts}>{theFacts(report, texts)}</Text>
 
       <View style={styles.reasons}>
         {reasons.map((reason) => (

@@ -8,6 +8,7 @@ import {
   type LayoutChangeEvent,
 } from 'react-native';
 import type { ProximityReport } from 'react-native-location-confidence';
+import { useTexts } from '../i18n/LanguageContext';
 import { colorOfRelation, colors, fonts } from '../theme';
 import type { ReadingOnTheMap } from './scenarios';
 import { STREETS, toPoint, type Point } from './world';
@@ -81,6 +82,7 @@ export function StreetMap({
   readings,
   report,
 }: Props) {
+  const texts = useTexts();
   const [size, setSize] = useState({ width: 0, height: 0 });
   const onLayout = (event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout;
@@ -207,7 +209,7 @@ export function StreetMap({
               { left: leftOf(0) - 60, top: topOf(0) - radiusPixels - 18 },
             ]}
           >
-            delivery radius, {radiusMeters} m
+            {texts.map.deliveryRadius(radiusMeters)}
           </Text>
 
           {/* The GPS error of the reading the library used. */}
@@ -273,19 +275,21 @@ export function StreetMap({
 
 /** What each mark on the map means. */
 export function MapLegend() {
+  const texts = useTexts();
+
   return (
     <View style={styles.legend}>
       <View style={styles.legendItem}>
         <View style={[styles.courier, styles.legendMark]} />
-        <Text style={styles.legendText}>courier</Text>
+        <Text style={styles.legendText}>{texts.map.courier}</Text>
       </View>
       <View style={styles.legendItem}>
         <View style={[styles.reading, styles.legendMark]} />
-        <Text style={styles.legendText}>GPS reading</Text>
+        <Text style={styles.legendText}>{texts.map.gpsReading}</Text>
       </View>
       <View style={styles.legendItem}>
         <View style={[styles.legendArea, styles.legendMark]} />
-        <Text style={styles.legendText}>where the phone could be</Text>
+        <Text style={styles.legendText}>{texts.map.whereThePhoneCouldBe}</Text>
       </View>
     </View>
   );

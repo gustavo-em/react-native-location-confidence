@@ -1,0 +1,12 @@
+/*
+ * What the system shows when the example asks for a permission, in English.
+ *
+ * This folder (en.lproj) and its twin (pt.lproj) are also what tells iOS
+ * that the app speaks English and Portuguese. Without them iOS runs the app
+ * "in English" on every phone, and the app cannot learn that the phone is
+ * set to Portuguese.
+ */
+
+"NSLocationWhenInUseUsageDescription" = "The example reads your location only when you ask for a report, or while a session you opened keeps collecting, to show how good the location evidence is for a delivery address. Nothing is stored or sent.";
+
+"NSMotionUsageDescription" = "The example uses what the phone reports about its movement (standing still, walking) to tell whether an older location is still useful.";

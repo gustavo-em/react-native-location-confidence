@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { Pressable, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { LanguageSwitch } from './components/LanguageSwitch';
 import { DeviceScreen } from './device/DeviceScreen';
+import { LanguageProvider, useTexts } from './i18n/LanguageContext';
 import { SimulatorScreen } from './simulator/SimulatorScreen';
 import { colors, fonts } from './theme';
 
@@ -15,49 +17,62 @@ import { colors, fonts } from './theme';
  *
  * Only one of them is alive at a time. Leaving the simulator turns the
  * simulation off, so the other screen always talks to the real GPS.
+ *
+ * At the top, "English | Português" picks the language of every sentence.
+ * Changing it does not restart anything: a scenario keeps playing.
  */
 
 type Screen = 'simulator' | 'device';
 
-const SCREENS: ReadonlyArray<{ id: Screen; title: string }> = [
-  { id: 'simulator', title: 'Simulated courier' },
-  { id: 'device', title: 'This phone' },
-];
+const SCREENS: readonly Screen[] = ['simulator', 'device'];
 
 export default function App() {
+  return (
+    <LanguageProvider>
+      <SafeAreaProvider>
+        <StatusBar barStyle="dark-content" />
+        <HeaderAndScreens />
+      </SafeAreaProvider>
+    </LanguageProvider>
+  );
+}
+
+function HeaderAndScreens() {
+  const texts = useTexts();
   const [screen, setScreen] = useState<Screen>('simulator');
 
   return (
-    <SafeAreaProvider>
-      <StatusBar barStyle="dark-content" />
-      <SafeAreaView style={styles.app}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Location confidence</Text>
-          <View style={styles.tabs} accessibilityRole="tablist">
-            {SCREENS.map((candidate) => {
-              const isShown = candidate.id === screen;
-              return (
-                <Pressable
-                  key={candidate.id}
-                  accessibilityRole="tab"
-                  accessibilityState={{ selected: isShown }}
-                  onPress={() => setScreen(candidate.id)}
-                  style={[styles.tab, isShown && styles.tabShown]}
-                >
-                  <Text
-                    style={[styles.tabText, isShown && styles.tabTextShown]}
-                  >
-                    {candidate.title}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
+    <SafeAreaView style={styles.app}>
+      <View style={styles.header}>
+        <View style={styles.titleRow}>
+          {/* The name of the library: the same in every language. */}
+          <Text style={styles.title} numberOfLines={1}>
+            Location confidence
+          </Text>
+          <LanguageSwitch />
         </View>
+        <View style={styles.tabs} accessibilityRole="tablist">
+          {SCREENS.map((candidate) => {
+            const isShown = candidate === screen;
+            return (
+              <Pressable
+                key={candidate}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: isShown }}
+                onPress={() => setScreen(candidate)}
+                style={[styles.tab, isShown && styles.tabShown]}
+              >
+                <Text style={[styles.tabText, isShown && styles.tabTextShown]}>
+                  {texts.tabs[candidate]}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
 
-        {screen === 'simulator' ? <SimulatorScreen /> : <DeviceScreen />}
-      </SafeAreaView>
-    </SafeAreaProvider>
+      {screen === 'simulator' ? <SimulatorScreen /> : <DeviceScreen />}
+    </SafeAreaView>
   );
 }
 
@@ -71,7 +86,13 @@ const styles = StyleSheet.create({
     paddingTop: 6,
     paddingBottom: 10,
   },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   title: {
+    flexShrink: 1,
     fontFamily: fonts.sign,
     fontWeight: '700',
     fontSize: 26,

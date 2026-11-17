@@ -9,7 +9,36 @@ import type { Point } from './world';
  *
  * The scripts know nothing about scores. What the screen shows about the
  * evidence always comes from the library.
+ *
+ * They know nothing about languages either: a moment only names the
+ * sentence to show (a CaptionId). The words are in i18n/texts.ts.
  */
+
+export type ScenarioId =
+  | 'arriving'
+  | 'gps-jump'
+  | 'signal-lost'
+  | 'lost-standing-still'
+  | 'fake-gps'
+  | 'approximate';
+
+/** The sentences a scenario can show under the map, by name. */
+export type CaptionId =
+  | 'ridingToTheAddress'
+  | 'atTheEdgeOfTheRadius'
+  | 'insideAndStillMoving'
+  | 'parkedAtTheAddress'
+  | 'waitingAtTheAddress'
+  | 'oneReadingFarAway'
+  | 'oddReadingStillRemembered'
+  | 'readingsAgreeAgain'
+  | 'gpsWentSilent'
+  | 'silenceGetsLonger'
+  | 'waitingAndStandingStill'
+  | 'silentButStandingStill'
+  | 'fakeGpsAtTheDoor'
+  | 'unmarkedProvesNothing'
+  | 'blurredOnPurpose';
 
 export type PhoneActivityToPretend =
   'stationary' | 'walking' | 'running' | 'cycling' | 'vehicle' | null;
@@ -32,13 +61,13 @@ export type Moment = Readonly<{
   readings: readonly ReadingOnTheMap[];
   /** What the phone starts reporting about its movement. Left out: no change. */
   phoneActivity?: PhoneActivityToPretend;
-  /** One or two sentences that tell the viewer what is going on. */
-  caption: string;
+  /** Which sentence tells the viewer what is going on. */
+  caption: CaptionId;
 }>;
 
 export type Scenario = Readonly<{
-  id: string;
-  title: string;
+  /** Its title on the screen is in i18n/texts.ts, under this id. */
+  id: ScenarioId;
   radiusMeters: number;
   /** How many meters the map shows from its left edge to its right edge. */
   metersAcrossTheMap: number;
@@ -112,7 +141,6 @@ function courierOnTheWay(second: number): { at: Point; speedMps: number } {
 
 const arriving: Scenario = {
   id: 'arriving',
-  title: 'Arriving',
   radiusMeters: RADIUS_METERS,
   metersAcrossTheMap: 400,
   lengthSeconds: 23,
@@ -120,21 +148,15 @@ const arriving: Scenario = {
     const { at, speedMps } = courierOnTheWay(second);
     const metersFromTheAddress = Math.hypot(at.x, at.y);
 
-    let caption: string;
+    let caption: CaptionId;
     if (speedMps === 0) {
-      caption =
-        'Parked in front of the address. One reading after another tells ' +
-        'the same story.';
+      caption = 'parkedAtTheAddress';
     } else if (metersFromTheAddress > RADIUS_METERS + 15) {
-      caption =
-        'A courier rides to the address. The GPS delivers a reading every ' +
-        'second, each with an error of about 8 m.';
+      caption = 'ridingToTheAddress';
     } else if (metersFromTheAddress > RADIUS_METERS - 15) {
-      caption =
-        'At the edge of the delivery radius. With 8 m of error the phone ' +
-        'may be on either side of the line.';
+      caption = 'atTheEdgeOfTheRadius';
     } else {
-      caption = 'Inside the delivery radius and still moving.';
+      caption = 'insideAndStillMoving';
     }
 
     return {
@@ -155,15 +177,10 @@ const SECOND_THE_READINGS_AGREE_AGAIN = 15;
 
 const gpsJump: Scenario = {
   id: 'gps-jump',
-  title: 'GPS jump',
   radiusMeters: RADIUS_METERS,
   metersAcrossTheMap: 700,
   lengthSeconds: 19,
   momentAt(second) {
-    const captionOfTheJump =
-      'The courier has not moved, but one reading lands 340 m away ' +
-      '(the red dot). Nobody travels that far in one second.';
-
     if (second === SECOND_OF_THE_JUMP) {
       return {
         courier: PARKING_SPOT,
@@ -174,24 +191,26 @@ const gpsJump: Scenario = {
             look: 'wrong',
           },
         ],
-        caption: captionOfTheJump,
+        caption: 'oneReadingFarAway',
       };
     }
 
     // A glitch is often followed by a moment with no reading at all.
     if (second === SECOND_OF_THE_JUMP + 1) {
-      return { courier: PARKING_SPOT, readings: [], caption: captionOfTheJump };
+      return {
+        courier: PARKING_SPOT,
+        readings: [],
+        caption: 'oneReadingFarAway',
+      };
     }
 
-    let caption: string;
+    let caption: CaptionId;
     if (second < SECOND_OF_THE_JUMP) {
-      caption = 'The courier waits in front of the address.';
+      caption = 'waitingAtTheAddress';
     } else if (second < SECOND_THE_READINGS_AGREE_AGAIN) {
-      caption =
-        'Good readings are back, but the odd one is still remembered and ' +
-        'contradicts them. Trust stays lower for a few seconds.';
+      caption = 'oddReadingStillRemembered';
     } else {
-      caption = 'The readings tell one story again.';
+      caption = 'readingsAgreeAgain';
     }
 
     return {
@@ -208,7 +227,6 @@ const SECOND_THE_GPS_GOES_SILENT = 5;
 
 const signalLost: Scenario = {
   id: 'signal-lost',
-  title: 'Signal lost',
   radiusMeters: RADIUS_METERS,
   metersAcrossTheMap: 520,
   lengthSeconds: 22,
@@ -217,7 +235,7 @@ const signalLost: Scenario = {
       return {
         courier: PARKING_SPOT,
         readings: [usualReading(PARKING_SPOT, second, 0)],
-        caption: 'The courier waits in front of the address.',
+        caption: 'waitingAtTheAddress',
       };
     }
 
@@ -225,12 +243,7 @@ const signalLost: Scenario = {
     return {
       courier: PARKING_SPOT,
       readings: [],
-      caption:
-        silentFor < 6
-          ? 'The GPS goes silent, as in a garage or a lobby. Nothing tells ' +
-            'whether the phone moved since the last reading.'
-          : 'The longer the silence, the farther the phone could be from ' +
-            'its last reading.',
+      caption: silentFor < 6 ? 'gpsWentSilent' : 'silenceGetsLonger',
     };
   },
 };
@@ -239,7 +252,6 @@ const signalLost: Scenario = {
 
 const lostButStandingStill: Scenario = {
   id: 'lost-standing-still',
-  title: 'Lost, standing still',
   radiusMeters: RADIUS_METERS,
   metersAcrossTheMap: 520,
   lengthSeconds: 22,
@@ -251,18 +263,14 @@ const lostButStandingStill: Scenario = {
         // Reported once, at the start; it stays true until something else
         // is reported.
         phoneActivity: second === 0 ? 'stationary' : undefined,
-        caption:
-          'The courier waits in front of the address. The phone reports ' +
-          'that it is standing still (this report is simulated too).',
+        caption: 'waitingAndStandingStill',
       };
     }
 
     return {
       courier: PARKING_SPOT,
       readings: [],
-      caption:
-        'The same silence, but the phone keeps reporting that it stands ' +
-        'still. The last reading stays useful for much longer.',
+      caption: 'silentButStandingStill',
     };
   },
 };
@@ -274,7 +282,6 @@ const WHERE_THE_COURIER_REALLY_IS: Point = { x: -100, y: 110 };
 
 const fakeGps: Scenario = {
   id: 'fake-gps',
-  title: 'Fake GPS',
   radiusMeters: RADIUS_METERS,
   metersAcrossTheMap: 560,
   lengthSeconds: 14,
@@ -283,12 +290,7 @@ const fakeGps: Scenario = {
     return {
       courier: WHERE_THE_COURIER_REALLY_IS,
       readings: [{ ...atTheDoor, flaggedAsMock: true, look: 'wrong' }],
-      caption:
-        second < 7
-          ? 'The courier is 150 m away. A fake-GPS app reports readings ' +
-            'at the door (the red dots), and the system marks them as mock.'
-          : 'A reading that is not marked proves nothing either. This is ' +
-            'evidence quality, never proof of presence.',
+      caption: second < 7 ? 'fakeGpsAtTheDoor' : 'unmarkedProvesNothing',
     };
   },
 };
@@ -297,7 +299,6 @@ const fakeGps: Scenario = {
 
 const approximateOnly: Scenario = {
   id: 'approximate',
-  title: 'Approximate only',
   radiusMeters: RADIUS_METERS,
   metersAcrossTheMap: 560,
   lengthSeconds: 10,
@@ -312,9 +313,7 @@ const approximateOnly: Scenario = {
           look: 'usual',
         },
       ],
-      caption:
-        'The user allowed only the approximate location. The system blurs ' +
-        'every reading on purpose: about 2 km of error.',
+      caption: 'blurredOnPurpose',
     };
   },
 };

@@ -35,7 +35,7 @@
 		<true/>
 	</dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>The example reads your location only when you tap Evaluate, to show how good the location evidence is for a delivery address. Nothing is stored or sent.</string>
+	<string>The example reads your location only when you ask for a report, or while a session you opened keeps collecting, to show how good the location evidence is for a delivery address. Nothing is stored or sent.</string>
 	<key>NSMotionUsageDescription</key>
 	<string>The example uses what the phone reports about its movement (standing still, walking) to tell whether an older location is still useful.</string>
 	<key>RCTNewArchEnabled</key>

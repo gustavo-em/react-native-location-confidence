@@ -17,6 +17,7 @@ import {
   type Session,
 } from 'react-native-location-confidence';
 import { ReportPanel } from '../components/ReportPanel';
+import { useTexts } from '../i18n/LanguageContext';
 import { ADDRESS } from '../simulator/world';
 import { colors, fonts } from '../theme';
 
@@ -24,13 +25,24 @@ import { colors, fonts } from '../theme';
  * The library with the real GPS of this phone.
  *
  * Opening this screen only reads what the phone can do and which
- * permissions exist. The GPS is turned on only by "Evaluate" (or by a
+ * permissions exist. The GPS is turned on only by "Get report" (or by a
  * session that was asked to keep collecting), and the permission dialog
  * only by "Allow location".
  *
  * Coordinates are shown on this screen and nowhere else: nothing is stored
  * and nothing is sent.
  */
+
+/**
+ * What went wrong. Kept as facts, not as a finished sentence, so that it
+ * can be shown in the language the app is in at the moment.
+ */
+type Problem = Readonly<{
+  /** The argument the library refused, for example "radiusMeters". */
+  argument: string | null;
+  /** The library's own message. It is written for the developer, in English. */
+  message: string;
+}>;
 
 /** A number typed by a person: "12,5" and "12.5" are both fine. */
 function numberTyped(text: string): number {
@@ -69,6 +81,7 @@ function Fact({ name, value }: { name: string; value: string }) {
 }
 
 export function DeviceScreen() {
+  const texts = useTexts();
   const [capabilities, setCapabilities] = useState<Capabilities | null>(null);
   const [authorization, setAuthorization] = useState<Authorization | null>(
     null
@@ -80,7 +93,7 @@ export function DeviceScreen() {
   const [radius, setRadius] = useState('100');
   const [report, setReport] = useState<ProximityReport | null>(null);
   const [showFullReport, setShowFullReport] = useState(false);
-  const [problem, setProblem] = useState<string | null>(null);
+  const [problem, setProblem] = useState<Problem | null>(null);
   const [isWaitingForTheReport, setIsWaitingForTheReport] = useState(false);
 
   const requestInProgress = useRef<AbortController | null>(null);
@@ -88,9 +101,12 @@ export function DeviceScreen() {
 
   const showProblem = useCallback((error: unknown) => {
     if (error instanceof InvalidArgumentError) {
-      setProblem(`Check ${error.argument}: ${error.message}`);
+      setProblem({ argument: error.argument, message: error.message });
     } else {
-      setProblem(error instanceof Error ? error.message : String(error));
+      setProblem({
+        argument: null,
+        message: error instanceof Error ? error.message : String(error),
+      });
     }
   }, []);
 
@@ -185,12 +201,50 @@ export function DeviceScreen() {
     }
   }
 
-  const locationText =
+  // --- The words for what the phone reported -----------------------------------
+  const words = texts.device;
+
+  let locationPermissionText: string;
+  if (authorization === null) {
+    locationPermissionText = words.reading;
+  } else if (authorization.locationGranted) {
+    locationPermissionText = words.allowed(
+      words.precisions[authorization.precision]
+    );
+  } else {
+    locationPermissionText = words.permissionStates[authorization.location];
+  }
+
+  let locationSwitchText: string;
+  if (capabilities === null) {
+    locationSwitchText = words.reading;
+  } else if (capabilities.locationServicesEnabled) {
+    locationSwitchText = words.on;
+  } else {
+    locationSwitchText = words.off;
+  }
+
+  const phoneActivityText =
     authorization === null
-      ? 'reading...'
-      : authorization.locationGranted
-        ? `allowed, ${authorization.precision}`
-        : authorization.location.replace('_', ' ');
+      ? words.reading
+      : words.permissionStates[authorization.motion];
+
+  // When the collecting could not start, the reason codes say why. They
+  // stay as the library writes them.
+  let collectingText = '';
+  if (session !== null) {
+    collectingText = words.collectingStates[session.monitoring];
+    if (session.reasonCodes.length > 0) {
+      collectingText += `: ${session.reasonCodes.join(', ')}`;
+    }
+  }
+
+  let problemText: string | null = null;
+  if (problem !== null && problem.argument !== null) {
+    problemText = words.checkArgument(problem.argument, problem.message);
+  } else if (problem !== null) {
+    problemText = problem.message;
+  }
 
   return (
     <ScrollView
@@ -198,99 +252,71 @@ export function DeviceScreen() {
       contentContainerStyle={styles.content}
       keyboardShouldPersistTaps="handled"
     >
-      <Text style={styles.heading}>This phone</Text>
-      <Fact name="Location permission" value={locationText} />
-      <Fact
-        name="Location switch"
-        value={
-          capabilities === null
-            ? 'reading...'
-            : capabilities.locationServicesEnabled
-              ? 'on'
-              : 'off'
-        }
-      />
-      <Fact
-        name="Phone activity"
-        value={
-          authorization === null
-            ? 'reading...'
-            : authorization.motion.replace('_', ' ')
-        }
-      />
+      <Text style={styles.heading}>{words.thisPhone}</Text>
+      <Fact name={words.locationPermission} value={locationPermissionText} />
+      <Fact name={words.locationSwitch} value={locationSwitchText} />
+      <Fact name={words.phoneActivity} value={phoneActivityText} />
       {authorization !== null && !authorization.locationGranted && (
-        <Button title="Allow location" onPress={allowLocation} />
+        <Button title={words.allowLocation} onPress={allowLocation} />
       )}
 
-      <Text style={styles.heading}>Session</Text>
-      <Text style={styles.explanation}>
-        A session remembers the last readings, so a request can still answer
-        when the GPS is slow. Without one, each request starts from nothing.
-      </Text>
+      <Text style={styles.heading}>{words.session}</Text>
+      <Text style={styles.explanation}>{words.sessionExplanation}</Text>
       {session === null ? (
         <>
           <View style={styles.switchRow}>
-            <Text style={styles.switchText}>
-              Keep collecting readings while it is open
-            </Text>
+            <Text style={styles.switchText}>{words.keepCollecting}</Text>
             <Switch
               value={keepCollecting}
               onValueChange={setKeepCollecting}
               trackColor={{ true: colors.ink, false: colors.line }}
             />
           </View>
-          <Button title="Open a session" onPress={openSession} />
+          <Button title={words.openASession} onPress={openSession} />
         </>
       ) : (
         <>
-          <Fact name="Session" value={`open, number ${session.id}`} />
-          <Fact
-            name="Collecting"
-            value={
-              session.reasonCodes.length > 0
-                ? `${session.monitoring}: ${session.reasonCodes.join(', ')}`
-                : session.monitoring.replace('_', ' ')
-            }
-          />
-          <Button title="Close the session" onPress={closeSession} />
+          <Fact name={words.session} value={words.sessionIsOpen(session.id)} />
+          <Fact name={words.collecting} value={collectingText} />
+          <Button title={words.closeTheSession} onPress={closeSession} />
         </>
       )}
 
-      <Text style={styles.heading}>Delivery address</Text>
+      <Text style={styles.heading}>{words.deliveryAddress}</Text>
       <View style={styles.inputs}>
         <View style={styles.inputWide}>
-          <Text style={styles.inputName}>Latitude</Text>
+          <Text style={styles.inputName}>{words.latitude}</Text>
           <TextInput
             style={styles.input}
             value={latitude}
             onChangeText={setLatitude}
             keyboardType="numbers-and-punctuation"
-            accessibilityLabel="Latitude of the address"
+            accessibilityLabel={words.latitudeForScreenReaders}
           />
         </View>
         <View style={styles.inputWide}>
-          <Text style={styles.inputName}>Longitude</Text>
+          <Text style={styles.inputName}>{words.longitude}</Text>
           <TextInput
             style={styles.input}
             value={longitude}
             onChangeText={setLongitude}
             keyboardType="numbers-and-punctuation"
-            accessibilityLabel="Longitude of the address"
+            accessibilityLabel={words.longitudeForScreenReaders}
           />
         </View>
         <View style={styles.inputNarrow}>
-          <Text style={styles.inputName}>Radius, m</Text>
+          <Text style={styles.inputName}>{words.radius}</Text>
           <TextInput
             style={styles.input}
             value={radius}
             onChangeText={setRadius}
             keyboardType="numbers-and-punctuation"
-            accessibilityLabel="Delivery radius in meters"
+            accessibilityLabel={words.radiusForScreenReaders}
           />
         </View>
       </View>
       <Button
-        title="Use the last reading as the address"
+        title={words.useTheLastReading}
         onPress={useTheLastReadingAsTheAddress}
         disabled={report?.measuredPosition == null}
       />
@@ -298,30 +324,29 @@ export function DeviceScreen() {
       <View style={styles.actions}>
         <View style={styles.action}>
           <Button
-            title="Evaluate"
+            title={words.getReport}
             onPress={getReport}
             disabled={isWaitingForTheReport}
           />
         </View>
         <View style={styles.action}>
           <Button
-            title="Cancel"
+            title={words.cancel}
             onPress={() => requestInProgress.current?.abort()}
             disabled={!isWaitingForTheReport}
           />
         </View>
       </View>
 
-      {problem !== null && <Text style={styles.problem}>{problem}</Text>}
+      {problemText !== null && (
+        <Text style={styles.problem}>{problemText}</Text>
+      )}
 
       <View style={styles.result}>
         <ReportPanel
           report={report}
           whenEmpty={
-            isWaitingForTheReport
-              ? 'Waiting for the GPS...'
-              : 'Nothing evaluated yet. "Evaluate" turns the GPS on for a ' +
-                'few seconds and reports how good the evidence is.'
+            isWaitingForTheReport ? words.waitingForTheGps : words.noReportYet
           }
         />
       </View>
@@ -330,7 +355,7 @@ export function DeviceScreen() {
         <>
           <Button
             title={
-              showFullReport ? 'Hide the full report' : 'Show the full report'
+              showFullReport ? words.hideTheFullReport : words.showTheFullReport
             }
             onPress={() => setShowFullReport(!showFullReport)}
           />

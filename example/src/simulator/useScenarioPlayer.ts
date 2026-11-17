@@ -11,9 +11,9 @@ import { ADDRESS, toCoordinates } from './world';
  *
  * Every second:
  *
- *   1. ask the library for a request          (it waits for a reading)
+ *   1. ask the library for a report           (the request waits for a reading)
  *   2. hand over what the pretend GPS reports (maybe nothing)
- *   3. show the answer when it comes
+ *   3. show the report when it comes
  *
  * The library runs exactly as it would with a real GPS. The only thing
  * replaced is where the readings come from.
