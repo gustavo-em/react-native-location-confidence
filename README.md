@@ -80,7 +80,7 @@ It does not replace them. They give your app positions. This library answers one
 | [`react-native-get-location`](https://www.npmjs.com/package/react-native-get-location) | One position | No. When the timeout passes, the request fails with `TIMEOUT`. |
 | **`react-native-location-confidence`** | One answer: how good is the evidence that the phone is inside this radius? | Yes. That is all it does. |
 
-Those libraries are mature and used by many apps. This one is version 0.1.0 and has run only on an emulator and a simulator so far. If you need positions on a map, tracking, or background location, use one of them. The [full comparison](https://github.com/gustavo-em/react-native-location-confidence/blob/main/docs/COMPARISON.md) has the details and the sources.
+Those libraries are mature and used by many apps. This one is version 0.1.0. So far it has run on an emulator, a simulator and one physical Android phone. If you need positions on a map, tracking, or background location, use one of them. The [full comparison](https://github.com/gustavo-em/react-native-location-confidence/blob/main/docs/COMPARISON.md) has the details and the sources.
 
 ## Compatibility
 
@@ -89,9 +89,9 @@ Only what was really built and run is listed.
 | | Built and run with |
 |---|---|
 | React Native | 0.88.1, New Architecture (TurboModule). The old architecture is not supported. |
-| Android | compileSdk 36, minSdk 24, ABIs `arm64-v8a` and `x86_64`. Run on an Android 17 emulator (arm64), debug and release (R8 on). |
+| Android | compileSdk 36, minSdk 24, ABIs `arm64-v8a`, `armeabi-v7a` and `x86_64`. Run on an Android 17 emulator (arm64), debug and release (R8 on). |
 | iOS | Xcode 26.1.1, deployment target 15.1 (React Native's minimum). Run on the iOS 26.1 Simulator, debug and release. |
-| Physical devices | Not tested yet. |
+| Physical devices | One Android phone so far: a Samsung Galaxy J6 (Android 10, 32-bit ARM), release build, on 18 November 2026. Indoors and standing still, three reports with the real GPS came out as designed. Not tested yet: outdoors, a GPS that stays silent, approximate permission, a fake-GPS app. No physical iPhone yet. |
 
 Expo Go is not supported: the library has native code, so it needs a development build (or any app you compile yourself).
 

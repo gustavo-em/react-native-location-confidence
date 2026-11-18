@@ -169,3 +169,42 @@ Continua em aberto:
 - PUB-025: `peerDependencies` aceita qualquer versão do React Native; só a 0.88.1 foi validada.
 - Aparelhos físicos, Core Motion real, stress e benchmark.
 - O registro do npm mostra o e-mail da conta do owner como mantenedor do pacote. Trocar isso é configuração da conta dele.
+
+## Primeiro teste em aparelho físico em 18/11/2026
+
+A pedido do owner, o app de exemplo rodou em um celular dele, ligado por cabo.
+
+| | |
+|---|---|
+| Aparelho | Samsung Galaxy J6 (SM-J600GT), Android 10 (SDK 29), ARM de 32 bits (`armeabi-v7a`), com Google Play Services |
+| Build | APK release do app de exemplo, com `arm64-v8a` e `armeabi-v7a` |
+| Onde | dentro de casa, celular parado sobre a mesa |
+| Permissão | localização precisa, "durante o uso do app", concedida pelo owner na tela do celular |
+
+Foi a primeira compilação da biblioteca para `armeabi-v7a`. O APK usado até então só tinha `arm64-v8a` e não abriria nesse aparelho.
+
+O que rodou e o que a tela mostrou:
+
+| Pedido | Índice | Para onde a evidência aponta | Detalhe mostrado |
+|---|---|---|---|
+| Cenário simulado "Chegando" (coordenadas inventadas) | 97 no fim | dentro do raio | igual ao emulador |
+| GPS real, endereço padrão do app (longe do celular) | 75 | fora do raio | 83 antes do limite `single_fix`; leitura de 0,3 s; celular a até 34 m dela |
+| GPS real, endereço igual à última leitura, raio de 100 m | 75 | dentro do raio | 84 antes do limite `single_fix`; leitura de 0,2 s, a 4 m do endereço; até 29 m |
+| O mesmo, com sessão aberta coletando por 10 s | 91 | dentro do raio | sem limite; "as leituras recentes concordam entre si"; leitura de 0,1 s, a 9 m; até 22 m |
+
+Os três pedidos com GPS real trouxeram os motivos `motion_unavailable` e `uncertainty_model_heuristic`, como esperado no Android. O app não travou e o log do sistema não mostrou erro fatal.
+
+Como foi feito: instalação e toques pelo `adb`; o texto do relatório foi lido da tela pelo `uiautomator`. Nenhuma coordenada do owner foi anotada, e a sessão foi fechada no fim.
+
+O que este teste não cobre:
+
+- **Tempo até o relatório (D-03).** Não foi medido. "Leitura de 0,3 s" é a idade da leitura quando o relatório foi montado, não o tempo de espera. Só se sabe que os dois primeiros relatórios estavam na tela 14 s depois do toque, e o terceiro 6 s depois.
+- **GPS mudo de verdade** (garagem, portaria), rua aberta, celular em movimento.
+- **Permissão aproximada, localização desligada, app de GPS falso, app em segundo plano, economia de bateria.**
+- **iOS em aparelho físico e Core Motion real.** Nada.
+
+O gate "dois dispositivos físicos" continua em aberto: há um Android e nenhum iPhone.
+
+Achado no app de exemplo, não corrigido: em tela de 720 px de largura o título do topo aparece cortado ("Location confi…"), porque divide a linha com o seletor de idioma.
+
+O README e `docs/COMPARISON.md` passaram a dizer o que rodou em aparelho físico e o que não rodou. O README publicado no npm continua o da versão 0.1.0 até uma nova versão.
