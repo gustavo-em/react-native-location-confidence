@@ -9,10 +9,10 @@ Instead of yes or no, it answers with a report:
 - the **reasons**, as short fixed codes.
 
 <p>
-  <img src="https://raw.githubusercontent.com/gustavo-em/react-native-location-confidence/main/docs/demo/signal-lost-vs-standing-still.gif" width="560" alt="Two phones lose the GPS signal at the same moment. On the left nothing tells whether the phone moved: the area where it could be grows every second and the answer becomes 'evidence cannot take a side'. On the right the phone reports that it is standing still: the old reading stays useful and the answer stays 'evidence supports inside the radius'." />
+  <img src="https://raw.githubusercontent.com/gustavo-em/react-native-location-confidence/main/docs/demo/android-phone/arriving-then-gps-jump.gif" width="380" alt="A courier rides to an address on a street map and parks. While the courier is far, the answer is 'evidence points to outside the radius'; at the edge it is 'the evidence cannot take a side'; once parked it is 'evidence points to inside the radius', index 97. Then one GPS reading lands 340 m away. The library leaves it out, the index drops to 60, then 75, and is back to 97 eight seconds later." />
 </p>
 
-The same GPS silence on both sides. On the left nothing tells whether the phone moved. On the right the phone reports that it is standing still. Recorded from the example app, which plays made-up coordinates against the real engine. [More videos and screenshots](https://github.com/gustavo-em/react-native-location-confidence/tree/main/docs/demo).
+A courier rides to the address and parks. Then one GPS reading lands 340 m away: the library leaves it out, and the index drops from 97 to 60 before it goes back to 97. Recorded on an Android phone from the example app, which plays a made-up courier and made-up GPS readings against the real engine, on a real street map. [More videos and screenshots](https://github.com/gustavo-em/react-native-location-confidence/tree/main/docs/demo).
 
 ## Quick start
 
@@ -80,7 +80,7 @@ It does not replace them. They give your app positions. This library answers one
 | [`react-native-get-location`](https://www.npmjs.com/package/react-native-get-location) | One position | No. When the timeout passes, the request fails with `TIMEOUT`. |
 | **`react-native-location-confidence`** | One answer: how good is the evidence that the phone is inside this radius? | Yes. That is all it does. |
 
-Those libraries are mature and used by many apps. This one is version 0.1.0. So far it has run on an emulator, a simulator and one physical Android phone. If you need positions on a map, tracking, or background location, use one of them. The [full comparison](https://github.com/gustavo-em/react-native-location-confidence/blob/main/docs/COMPARISON.md) has the details and the sources.
+Those libraries are mature and used by many apps. This one is version 0.1.0. So far it has run on an emulator, a simulator and two physical Android phones, with the real GPS on one of them. If you need positions on a map, tracking, or background location, use one of them. The [full comparison](https://github.com/gustavo-em/react-native-location-confidence/blob/main/docs/COMPARISON.md) has the details and the sources.
 
 ## Compatibility
 
@@ -91,7 +91,7 @@ Only what was really built and run is listed.
 | React Native | 0.88.1, New Architecture (TurboModule). The old architecture is not supported. |
 | Android | compileSdk 36, minSdk 24, ABIs `arm64-v8a`, `armeabi-v7a` and `x86_64`. Run on an Android 17 emulator (arm64), debug and release (R8 on). |
 | iOS | Xcode 26.1.1, deployment target 15.1 (React Native's minimum). Run on the iOS 26.1 Simulator, debug and release. |
-| Physical devices | One Android phone so far: a Samsung Galaxy J6 (Android 10, 32-bit ARM), release build, on 18 November 2026. Indoors and standing still, three reports with the real GPS came out as designed. Not tested yet: outdoors, a GPS that stays silent, approximate permission, a fake-GPS app. No physical iPhone yet. |
+| Physical devices | Two Android phones so far, both with the release build. A Samsung Galaxy J6 (Android 10, 32-bit ARM), on 18 November 2026: indoors and standing still, three reports with the real GPS came out as designed. A Samsung Galaxy M53 (Android 14, 64-bit ARM), on 21 November 2026: only the six simulated situations of the example app, with no real GPS reading. Not tested yet: outdoors, a GPS that stays silent, approximate permission, a fake-GPS app. No physical iPhone yet. |
 
 Expo Go is not supported: the library has native code, so it needs a development build (or any app you compile yourself).
 

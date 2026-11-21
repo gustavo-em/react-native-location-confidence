@@ -256,6 +256,6 @@ O que este teste não cobre:
 - **GPS real neste aparelho.** Não rodou. O pedido de permissão de localização não chegou a ser feito: a escolha no diálogo é do owner, e o toque que abre o diálogo ficou para ele.
 - Tudo o que o teste de 18/11 já não cobria: rua aberta, GPS mudo de verdade, permissão aproximada, app de GPS falso, iPhone físico.
 
-Com GPS real, portanto, continua havendo um aparelho só (o Galaxy J6). O README e `docs/COMPARISON.md` continuam dizendo "um celular Android", o que segue correto para o GPS real.
+Com GPS real, portanto, continua havendo um aparelho só (o Galaxy J6). O README e `docs/COMPARISON.md` passaram a dizer "dois celulares Android, com o GPS real em um deles".
 
-As gravações em `docs/demo` são da aparência anterior do exemplo, com o mapa desenhado. Ainda não foram refeitas.
+As gravações antigas em `docs/demo` são da aparência anterior do exemplo, com o mapa desenhado. A pedido do owner, no mesmo dia, a animação do topo do README foi trocada por uma gravação nova, feita no Galaxy M53 com o app em inglês: `docs/demo/android-phone/arriving-then-gps-jump.gif` ("Chegando" e, em seguida, "Salto de GPS"). A animação antiga continua no repositório, porque o README da versão 0.1.0 no npm aponta para ela.

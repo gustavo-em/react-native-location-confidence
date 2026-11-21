@@ -1,15 +1,30 @@
 # Demo recordings
 
 Recorded from the example app (`example/`), screen "Simulated courier",
-running the release build on an Android emulator and on the iOS Simulator.
+running the release build on an Android emulator, on the iOS Simulator and,
+for the newest one, on a physical Android phone.
 
-Every coordinate in these recordings is made up. The simulator feeds made-up
-GPS readings to the real library, so what the panel shows is what the engine
-really answers. No real location is read.
+The courier and every GPS reading in these recordings are made up. The
+simulator feeds made-up GPS readings to the real library, so what the panel
+shows is what the engine really answers. No real location is read.
 
-These recordings show an earlier look of the example app, with a map drawn
-by the app itself. Since 21 November 2026 the simulator shows a real street
-map underneath. The six situations and their numbers are the same.
+The folders `android/`, `ios/` and `ios-pt/` show an earlier look of the
+example app, with a map drawn by the app itself. Since 21 November 2026 the
+simulator shows a real street map underneath: that is the look in
+`android-phone/`. The six situations and their numbers are the same.
+
+## The newest recording
+
+`android-phone/` was recorded on a Samsung Galaxy M53 (Android 14), with the
+app in English. The streets are real, in São Paulo. The courier and the GPS
+readings are made up.
+
+| File | What it shows |
+|---|---|
+| `arriving-then-gps-jump.mp4` | Two situations, one after the other (39 s): a courier rides to the address and parks, then one reading lands 340 m away. Only the map and the answer are kept from the screen, with a caption at the top. |
+| `arriving-then-gps-jump.gif` | The same, smaller and without sound. It is the animation at the top of the main README. |
+
+## The earlier recordings
 
 There are three folders:
 
@@ -32,8 +47,9 @@ Each folder has the same six situations:
 | `fake-gps.png` | The courier is 150 m away; a fake-GPS app reports the door. |
 | `approximate-only.png` | Only the approximate location is allowed. |
 
-`signal-lost-vs-standing-still.gif` is the animation at the top of the main
-README: the iOS side-by-side video, smaller and without sound.
+`signal-lost-vs-standing-still.gif` is the iOS side-by-side video, smaller and
+without sound. It was the animation at the top of the main README until 21
+November 2026, and the README of version 0.1.0 on npm still shows it.
 
 `ios/language-switch.mp4` (16 s) shows the app going from English to
 Portuguese while a situation plays: the switch only changes the words, and

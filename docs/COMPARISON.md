@@ -2,7 +2,7 @@
 
 `react-native-location-confidence` does not replace the location libraries below. They give your app positions: once, continuously, or in the background. This library answers one question about a position: **how good is the evidence that this phone is inside the delivery radius of this address, right now?**
 
-If your app needs a dot on a map, a route, tracking, or location in the background, use one of them. They are mature and used by many apps. This library is version 0.1.0. So far it has run on an emulator, a simulator and one physical Android phone, indoors.
+If your app needs a dot on a map, a route, tracking, or location in the background, use one of them. They are mature and used by many apps. This library is version 0.1.0. So far it has run on an emulator, a simulator and two physical Android phones, with the real GPS on one of them, indoors.
 
 Everything about the other libraries on this page was read on 17 November 2026 from the npm registry and from each project's own README or documentation. The links are at the end. Libraries change: check their pages before deciding.
 
@@ -53,7 +53,7 @@ With the other libraries your app decides what an old position is still worth. T
 - No background location and no geofences.
 - No support for the old architecture of React Native, and no Expo Go.
 - No reading of the phone's activity on Android yet.
-- Almost no test on physical devices yet: one Android phone, indoors and standing still, and no iPhone.
+- Almost no test on physical devices yet: the real GPS on one Android phone, indoors and standing still, the simulated situations on a second one, and no iPhone.
 - The numbers behind the index are design choices, not calibrated values.
 
 ## Which one to use
