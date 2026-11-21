@@ -11,6 +11,11 @@ import { useScenarioPlayer } from './useScenarioPlayer';
  *
  * Picking a situation plays it second by second. The map shows what the
  * simulation is doing; the panel under it shows what the library answers.
+ *
+ * Two signs at the top of the map say what the pretend phone knows at this
+ * second: whether the GPS is delivering readings, and what the phone
+ * reports about its own movement. Those two things are what the library
+ * has to work with.
  */
 export function SimulatorScreen() {
   const texts = useTexts();
@@ -30,6 +35,16 @@ export function SimulatorScreen() {
   } else {
     underTheMap = texts.simulator.pickASituation;
   }
+
+  // --- The two signs on the map -------------------------------------------------
+  const gpsIsSilent = moment !== null && moment.readings.length === 0;
+  const gpsSign = gpsIsSilent
+    ? texts.map.gpsSilentFor(state.secondsWithoutAReading)
+    : texts.map.gpsDelivering;
+  const movementSign =
+    state.phoneActivity === null
+      ? texts.map.movementNotReported
+      : texts.map.phoneReports(texts.map.activities[state.phoneActivity]);
 
   return (
     <ScrollView
@@ -78,19 +93,34 @@ export function SimulatorScreen() {
           readings={state.readings}
           report={state.report}
         />
+        {moment !== null && (
+          <View style={styles.signs} pointerEvents="none">
+            <View style={styles.sign}>
+              <View
+                style={[styles.gpsLight, gpsIsSilent && styles.gpsLightOff]}
+              />
+              <Text style={styles.signText}>{gpsSign}</Text>
+            </View>
+            <View style={styles.sign}>
+              <Text style={styles.signText}>{movementSign}</Text>
+            </View>
+          </View>
+        )}
       </View>
       <View style={styles.progressTrack}>
         <View style={[styles.progress, { width: `${partPlayed * 100}%` }]} />
       </View>
-      <MapLegend />
 
-      <Text style={styles.caption}>{underTheMap}</Text>
+      <View style={styles.underTheMap}>
+        <MapLegend />
+        <Text style={styles.caption}>{underTheMap}</Text>
 
-      <ReportPanel
-        report={state.report}
-        answers={state.answers}
-        whenEmpty={texts.simulator.answerShowsUpHere}
-      />
+        <ReportPanel
+          report={state.report}
+          answers={state.answers}
+          whenEmpty={texts.simulator.answerShowsUpHere}
+        />
+      </View>
     </ScrollView>
   );
 }
@@ -100,24 +130,68 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    paddingHorizontal: 16,
     paddingBottom: 24,
   },
+  // The map goes from one edge of the screen to the other.
   mapFrame: {
-    aspectRatio: 1.35,
+    aspectRatio: 1.2,
+  },
+  signs: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    right: 8,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  sign: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexShrink: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: colors.ink,
+    borderRadius: 4,
+    backgroundColor: colors.white,
+  },
+  signText: {
+    flexShrink: 1,
+    fontFamily: fonts.sign,
+    fontWeight: '700',
+    fontSize: 13,
+    lineHeight: 17,
+    color: colors.ink,
+  },
+  gpsLight: {
+    width: 9,
+    height: 9,
+    marginRight: 6,
+    borderRadius: 5,
+    backgroundColor: colors.inside,
+  },
+  gpsLightOff: {
+    borderWidth: 2,
+    borderColor: colors.alarm,
+    backgroundColor: colors.white,
   },
   progressTrack: {
-    height: 2,
-    marginTop: 4,
+    height: 3,
     backgroundColor: colors.line,
   },
   progress: {
-    height: 2,
+    height: 3,
     backgroundColor: colors.ink,
+  },
+  underTheMap: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
   },
   caption: {
     minHeight: 60,
-    marginTop: 8,
+    marginTop: 6,
     marginBottom: 10,
     fontSize: 15,
     lineHeight: 20,
@@ -125,7 +199,6 @@ const styles = StyleSheet.create({
   },
   scenarios: {
     flexGrow: 0,
-    marginHorizontal: -16,
     marginBottom: 10,
   },
   scenariosContent: {

@@ -5,7 +5,11 @@ import type {
   ReportStatus,
   Session,
 } from 'react-native-location-confidence';
-import type { CaptionId, ScenarioId } from '../simulator/scenarios';
+import type {
+  CaptionId,
+  PhoneActivityToPretend,
+  ScenarioId,
+} from '../simulator/scenarios';
 
 /*
  * Every sentence the example app shows, in English and in Portuguese.
@@ -61,6 +65,9 @@ export type ReasonName =
   | 'busy'
   | 'no_usable_fix';
 
+/** What the pretend phone can report about its own movement. */
+export type PhoneActivityName = NonNullable<PhoneActivityToPretend>;
+
 export type Texts = Readonly<{
   /** What a screen reader calls the language switch. */
   language: string;
@@ -80,9 +87,24 @@ export type Texts = Readonly<{
     courier: string;
     gpsReading: string;
     whereThePhoneCouldBe: string;
+    /** The tag beside that area. For example "could be up to 84 m away". */
+    couldBeUpTo: (meters: number) => string;
+    /** What a screen reader calls the map. */
+    mapForScreenReaders: string;
+    /** The sign on the map while the pretend GPS delivers readings. */
+    gpsDelivering: string;
+    /** For example "GPS silent for 9 s". */
+    gpsSilentFor: (seconds: number) => string;
+    /** The sign on the map while the phone reports nothing about movement. */
+    movementNotReported: string;
+    /** For example "Phone reports: standing still". */
+    phoneReports: (activity: string) => string;
+    activities: Record<PhoneActivityName, string>;
   };
 
   report: {
+    /** The word under the large number. */
+    indexWord: string;
     indexCaption: string;
     /** For example "Was 97 before the limits: single_fix." */
     wasBeforeTheLimits: (before: number, limits: string) => string;
@@ -91,8 +113,14 @@ export type Texts = Readonly<{
 
     requestCancelled: string;
     noReadingToJudge: string;
-    supportsInside: string;
-    supportsOutside: string;
+    /**
+     * The answer in two parts: a small line and, under it, large words.
+     * For example "Evidence points to" and "inside the radius".
+     */
+    evidencePointsTo: string;
+    insideTheRadius: string;
+    outsideTheRadius: string;
+    theEvidence: string;
     cannotTakeASide: string;
 
     limits: Record<LimitName, string>;
@@ -177,8 +205,9 @@ const english: Texts = {
 
   simulator: {
     pickASituation:
-      'Pick a situation above. Every coordinate here is made up: the real ' +
-      'GPS stays off and no permission is needed.',
+      'Pick a situation above. The streets are real, in São Paulo. The ' +
+      'courier and every GPS reading are made up: the real GPS stays off ' +
+      'and no permission is needed.',
     answerShowsUpHere: "The library's answer shows up here, once per second.",
     scenarioTitles: {
       'arriving': 'Arriving',
@@ -236,9 +265,24 @@ const english: Texts = {
     courier: 'courier',
     gpsReading: 'GPS reading',
     whereThePhoneCouldBe: 'where the phone could be',
+    couldBeUpTo: (meters) => `could be up to ${meters} m away`,
+    mapForScreenReaders:
+      'Street map with the delivery address, the courier and the GPS readings',
+    gpsDelivering: 'GPS: new reading',
+    gpsSilentFor: (seconds) => `GPS silent for ${seconds} s`,
+    movementNotReported: 'Movement: not reported',
+    phoneReports: (activity) => `Phone reports: ${activity}`,
+    activities: {
+      stationary: 'standing still',
+      walking: 'walking',
+      running: 'running',
+      cycling: 'cycling',
+      vehicle: 'in a vehicle',
+    },
   },
 
   report: {
+    indexWord: 'index',
     indexCaption: 'Evidence quality index, 0 to 100. Not a percentage.',
     wasBeforeTheLimits: (before, limits) =>
       `Was ${before} before the limits: ${limits}.`,
@@ -248,9 +292,11 @@ const english: Texts = {
 
     requestCancelled: 'Request cancelled',
     noReadingToJudge: 'No reading to judge',
-    supportsInside: 'Evidence supports inside the radius',
-    supportsOutside: 'Evidence supports outside the radius',
-    cannotTakeASide: 'Evidence cannot take a side',
+    evidencePointsTo: 'Evidence points to',
+    insideTheRadius: 'inside the radius',
+    outsideTheRadius: 'outside the radius',
+    theEvidence: 'The evidence',
+    cannotTakeASide: 'cannot take a side',
 
     limits: {
       mock_location: 'The system marked this reading as mock.',
@@ -375,8 +421,9 @@ const portuguese: Texts = {
 
   simulator: {
     pickASituation:
-      'Escolha uma situação acima. Toda coordenada aqui é inventada: o GPS ' +
-      'real fica desligado e nenhuma permissão é necessária.',
+      'Escolha uma situação acima. As ruas são reais, em São Paulo. O ' +
+      'entregador e toda leitura de GPS são inventados: o GPS real fica ' +
+      'desligado e nenhuma permissão é necessária.',
     answerShowsUpHere:
       'A resposta da biblioteca aparece aqui, uma vez por segundo.',
     scenarioTitles: {
@@ -436,9 +483,24 @@ const portuguese: Texts = {
     courier: 'entregador',
     gpsReading: 'leitura do GPS',
     whereThePhoneCouldBe: 'onde o celular pode estar',
+    couldBeUpTo: (meters) => `pode estar a até ${meters} m`,
+    mapForScreenReaders:
+      'Mapa de ruas com o endereço de entrega, o entregador e as leituras do GPS',
+    gpsDelivering: 'GPS: leitura nova',
+    gpsSilentFor: (seconds) => `GPS mudo há ${seconds} s`,
+    movementNotReported: 'Movimento: não informado',
+    phoneReports: (activity) => `Celular informa: ${activity}`,
+    activities: {
+      stationary: 'parado',
+      walking: 'andando',
+      running: 'correndo',
+      cycling: 'pedalando',
+      vehicle: 'em veículo',
+    },
   },
 
   report: {
+    indexWord: 'índice',
     indexCaption:
       'Índice de qualidade da evidência, de 0 a 100. Não é porcentagem.',
     wasBeforeTheLimits: (before, limits) =>
@@ -449,9 +511,11 @@ const portuguese: Texts = {
 
     requestCancelled: 'Pedido cancelado',
     noReadingToJudge: 'Nenhuma leitura para avaliar',
-    supportsInside: 'Evidência aponta: dentro do raio',
-    supportsOutside: 'Evidência aponta: fora do raio',
-    cannotTakeASide: 'Evidência não aponta um lado',
+    evidencePointsTo: 'A evidência aponta para',
+    insideTheRadius: 'dentro do raio',
+    outsideTheRadius: 'fora do raio',
+    theEvidence: 'A evidência',
+    cannotTakeASide: 'não aponta um lado',
 
     limits: {
       mock_location: 'O sistema marcou esta leitura como simulada.',

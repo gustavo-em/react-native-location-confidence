@@ -7,25 +7,44 @@ import {
   View,
   type LayoutChangeEvent,
 } from 'react-native';
+import { Camera, Map } from '@maplibre/maplibre-react-native';
 import type { ProximityReport } from 'react-native-location-confidence';
 import { useTexts } from '../i18n/LanguageContext';
 import { colorOfRelation, colors, fonts } from '../theme';
 import type { ReadingOnTheMap } from './scenarios';
-import { STREETS, toPoint, type Point } from './world';
+import {
+  ADDRESS,
+  DIRECTION_AT_THE_TOP_OF_THE_MAP_DEGREES,
+  mapZoomThatShows,
+  toPoint,
+  type Point,
+} from './world';
 
 /*
- * The map of the simulation, drawn with plain Views: no map service, no
- * key, no internet.
+ * The map of the simulation.
  *
- * What it shows:
- *   - the streets of a made-up neighborhood;
- *   - the delivery radius around the address;
+ * Underneath there is a real street map: MapLibre draws it with free map
+ * tiles from OpenFreeMap (data from OpenStreetMap), with no key and no
+ * account. It always shows the same public place, never where the phone
+ * is, and it cannot be dragged. With no internet it stays blank and
+ * everything else still works.
+ *
+ * On top of it, plain Views show what the simulation is doing:
+ *   - the delivery address and the delivery radius around it;
  *   - the courier, where the simulation really put them;
  *   - the readings the pretend GPS reported;
  *   - around the reading the library used, the area where the phone could
  *     be right now. That area is the library's answer, not a guess of this
  *     screen: it is `effectiveUncertaintyMeters` of the report.
+ *
+ * The map and the Views agree because both are centered on the address and
+ * the zoom of the map is computed from the same "meters across".
  */
+
+const MAP_STYLE = 'https://tiles.openfreemap.org/styles/positron';
+
+/** The credit the map data asks for. It is the same in every language. */
+const MAP_CREDIT = '© OpenStreetMap · OpenMapTiles · OpenFreeMap';
 
 type Props = Readonly<{
   /** Changes when another scenario starts: nothing glides across the map then. */
@@ -38,6 +57,21 @@ type Props = Readonly<{
 }>;
 
 const SCALE_BAR_METERS = 100;
+
+// The pin of the address is a square with three round corners, turned so
+// that the sharp corner points down at the address.
+const PIN_SIZE = 22;
+const PIN_TIP_BELOW_ITS_MIDDLE = (PIN_SIZE * Math.SQRT2) / 2;
+
+const COURIER_SIZE = 20;
+
+// The tag that says how far the phone could be. It has a fixed width so
+// that it can be kept inside the map.
+const AREA_TAG_WIDTH = 172;
+
+function keepBetween(value: number, lowest: number, highest: number): number {
+  return Math.min(Math.max(value, lowest), highest);
+}
 
 /** An Animated.Value that glides to `target` every time `target` changes. */
 function useGlidingValue(
@@ -127,6 +161,29 @@ export function StreetMap({
   const areaRadius = useGlidingValue(couldBeOffPixels, 350, sceneKey, easeOut);
   const errorRadius = useGlidingValue(gpsErrorPixels, 350, sceneKey, easeOut);
 
+  // The tag sits just under the area. When the area is larger than the map,
+  // the tag stays at the bottom of the map instead of leaving with the edge.
+  const areaTagLeft = useGlidingValue(
+    keepBetween(
+      leftOf(readingUsed?.x ?? 0) - AREA_TAG_WIDTH / 2,
+      8,
+      size.width - AREA_TAG_WIDTH - 8
+    ),
+    350,
+    sceneKey,
+    easeOut
+  );
+  const areaTagTop = useGlidingValue(
+    keepBetween(
+      topOf(readingUsed?.y ?? 0) + couldBeOffPixels + 6,
+      44,
+      size.height - 52
+    ),
+    350,
+    sceneKey,
+    easeOut
+  );
+
   // --- The courier ------------------------------------------------------------
   const courierLeft = useGlidingValue(
     leftOf(courier?.x ?? 0),
@@ -144,31 +201,47 @@ export function StreetMap({
   const areaColor =
     report === null ? colors.ink : colorOfRelation(report.evidenceRelation);
   const radiusPixels = radiusMeters * pixelsPerMeter;
-  const streetPixels = Math.max(3, STREETS.widthMeters * pixelsPerMeter);
   const mapIsMeasured = size.width > 0;
 
   return (
     <View style={styles.map} onLayout={onLayout}>
       {mapIsMeasured && (
         <>
-          {STREETS.runningEastToWestAtY.map((y) => (
-            <View
-              key={`east-west-${y}`}
-              style={[
-                styles.streetEastToWest,
-                { top: topOf(y) - streetPixels / 2, height: streetPixels },
-              ]}
-            />
-          ))}
-          {STREETS.runningNorthToSouthAtX.map((x) => (
-            <View
-              key={`north-south-${x}`}
-              style={[
-                styles.streetNorthToSouth,
-                { left: leftOf(x) - streetPixels / 2, width: streetPixels },
-              ]}
-            />
-          ))}
+          {/*
+            The street map. It is only a picture: touches pass through, and
+            a screen reader hears one sentence about it instead of the
+            instructions for dragging a map.
+          */}
+          <View
+            style={StyleSheet.absoluteFill}
+            pointerEvents="none"
+            accessible
+            accessibilityRole="image"
+            accessibilityLabel={texts.map.mapForScreenReaders}
+            importantForAccessibility="no-hide-descendants"
+          >
+            <Map
+              style={StyleSheet.absoluteFill}
+              mapStyle={MAP_STYLE}
+              androidView="texture"
+              dragPan={false}
+              touchZoom={false}
+              doubleTapZoom={false}
+              doubleTapHoldZoom={false}
+              touchRotate={false}
+              touchPitch={false}
+              attribution={false}
+              logo={false}
+              compass={false}
+            >
+              <Camera
+                center={[ADDRESS.longitude, ADDRESS.latitude]}
+                zoom={mapZoomThatShows(metersAcross, size.width)}
+                bearing={DIRECTION_AT_THE_TOP_OF_THE_MAP_DEGREES}
+                duration={0}
+              />
+            </Map>
+          </View>
 
           {/* Where the phone could be right now, according to the library. */}
           {readingUsed !== null && (
@@ -200,13 +273,10 @@ export function StreetMap({
               },
             ]}
           />
-          <View
-            style={[styles.address, { left: leftOf(0) - 5, top: topOf(0) - 5 }]}
-          />
           <Text
             style={[
               styles.radiusText,
-              { left: leftOf(0) - 60, top: topOf(0) - radiusPixels - 18 },
+              { left: leftOf(0) - 70, top: topOf(0) - radiusPixels - 21 },
             ]}
           >
             {texts.map.deliveryRadius(radiusMeters)}
@@ -246,16 +316,60 @@ export function StreetMap({
             );
           })}
 
-          {courier !== null && (
+          {/* The delivery address: the tip of the pin is on it. */}
+          <View
+            style={[
+              styles.pin,
+              {
+                left: leftOf(0) - PIN_SIZE / 2,
+                top: topOf(0) - PIN_TIP_BELOW_ITS_MIDDLE - PIN_SIZE / 2,
+              },
+            ]}
+          >
+            <View style={styles.pinHole} />
+          </View>
+
+          {readingUsed !== null && (
             <Animated.View
               style={[
-                styles.courier,
+                styles.areaTag,
                 {
-                  left: Animated.subtract(courierLeft, 8),
-                  top: Animated.subtract(courierTop, 8),
+                  backgroundColor: areaColor,
+                  left: areaTagLeft,
+                  top: areaTagTop,
                 },
               ]}
-            />
+            >
+              <Text style={styles.areaTagText} numberOfLines={1}>
+                {texts.map.couldBeUpTo(Math.round(couldBeOffMeters))}
+              </Text>
+            </Animated.View>
+          )}
+
+          {courier !== null && (
+            <>
+              <Animated.View
+                style={[
+                  styles.courier,
+                  {
+                    left: Animated.subtract(courierLeft, COURIER_SIZE / 2),
+                    top: Animated.subtract(courierTop, COURIER_SIZE / 2),
+                  },
+                ]}
+              />
+              {/* Above and to the right, where it covers the least. */}
+              <Animated.View
+                style={[
+                  styles.courierTag,
+                  {
+                    left: Animated.add(courierLeft, COURIER_SIZE / 2 + 2),
+                    top: Animated.subtract(courierTop, 25),
+                  },
+                ]}
+              >
+                <Text style={styles.courierTagText}>{texts.map.courier}</Text>
+              </Animated.View>
+            </>
           )}
 
           <View style={styles.scale}>
@@ -267,6 +381,7 @@ export function StreetMap({
             />
             <Text style={styles.scaleText}>{SCALE_BAR_METERS} m</Text>
           </View>
+          <Text style={styles.credit}>{MAP_CREDIT}</Text>
         </>
       )}
     </View>
@@ -279,10 +394,6 @@ export function MapLegend() {
 
   return (
     <View style={styles.legend}>
-      <View style={styles.legendItem}>
-        <View style={[styles.courier, styles.legendMark]} />
-        <Text style={styles.legendText}>{texts.map.courier}</Text>
-      </View>
       <View style={styles.legendItem}>
         <View style={[styles.reading, styles.legendMark]} />
         <Text style={styles.legendText}>{texts.map.gpsReading}</Text>
@@ -298,27 +409,13 @@ export function MapLegend() {
 const styles = StyleSheet.create({
   map: {
     flex: 1,
+    // What shows while the street map loads, or when there is no internet.
     backgroundColor: colors.block,
-    borderRadius: 6,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
     overflow: 'hidden',
-  },
-  streetEastToWest: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    backgroundColor: colors.street,
-  },
-  streetNorthToSouth: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    backgroundColor: colors.street,
   },
   areaWhereThePhoneCouldBe: {
     position: 'absolute',
-    opacity: 0.22,
+    opacity: 0.28,
   },
   deliveryRadius: {
     position: 'absolute',
@@ -328,18 +425,33 @@ const styles = StyleSheet.create({
   },
   radiusText: {
     position: 'absolute',
-    width: 120,
+    width: 140,
     textAlign: 'center',
     fontFamily: fonts.sign,
-    fontSize: 12,
+    fontWeight: '700',
+    fontSize: 13,
     color: colors.ink,
+    // A pale edge keeps the words readable over the lines of the map.
+    textShadowColor: colors.white,
+    textShadowRadius: 3,
   },
-  address: {
+  pin: {
     position: 'absolute',
-    width: 10,
-    height: 10,
+    width: PIN_SIZE,
+    height: PIN_SIZE,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderTopLeftRadius: PIN_SIZE / 2,
+    borderTopRightRadius: PIN_SIZE / 2,
+    borderBottomLeftRadius: PIN_SIZE / 2,
     backgroundColor: colors.ink,
     transform: [{ rotate: '45deg' }],
+  },
+  pinHole: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.white,
   },
   gpsError: {
     position: 'absolute',
@@ -352,7 +464,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     borderWidth: 1.5,
     borderColor: colors.ink,
-    backgroundColor: colors.street,
+    backgroundColor: colors.white,
   },
   wrongReading: {
     borderColor: colors.alarm,
@@ -360,12 +472,45 @@ const styles = StyleSheet.create({
   },
   courier: {
     position: 'absolute',
-    width: 16,
-    height: 16,
-    borderRadius: 8,
+    width: COURIER_SIZE,
+    height: COURIER_SIZE,
+    borderRadius: COURIER_SIZE / 2,
     borderWidth: 3,
     borderColor: colors.white,
     backgroundColor: colors.ink,
+    elevation: 3,
+    shadowColor: colors.ink,
+    shadowOpacity: 0.35,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1 },
+  },
+  courierTag: {
+    position: 'absolute',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 3,
+    backgroundColor: colors.ink,
+  },
+  areaTag: {
+    position: 'absolute',
+    width: AREA_TAG_WIDTH,
+    alignItems: 'center',
+    paddingVertical: 2,
+    borderRadius: 3,
+  },
+  areaTagText: {
+    fontFamily: fonts.sign,
+    fontWeight: '700',
+    fontSize: 12,
+    lineHeight: 16,
+    color: colors.white,
+  },
+  courierTagText: {
+    fontFamily: fonts.sign,
+    fontWeight: '700',
+    fontSize: 12,
+    lineHeight: 16,
+    color: colors.white,
   },
   scale: {
     position: 'absolute',
@@ -385,12 +530,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.ink,
   },
+  credit: {
+    position: 'absolute',
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    fontSize: 9,
+    color: colors.ink,
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+  },
   legend: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     columnGap: 14,
     rowGap: 2,
-    marginTop: 6,
   },
   legendItem: {
     flexDirection: 'row',
@@ -400,12 +554,13 @@ const styles = StyleSheet.create({
     position: 'relative',
     marginRight: 5,
   },
+  // The area takes the color of the answer, so its sample has none of them.
   legendArea: {
     width: 14,
     height: 14,
     borderRadius: 7,
-    backgroundColor: colors.inside,
-    opacity: 0.35,
+    backgroundColor: colors.ink,
+    opacity: 0.3,
   },
   legendText: {
     fontSize: 12,

@@ -46,7 +46,12 @@ function HeaderAndScreens() {
       <View style={styles.header}>
         <View style={styles.titleRow}>
           {/* The name of the library: the same in every language. */}
-          <Text style={styles.title} numberOfLines={1}>
+          <Text
+            style={styles.title}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.7}
+          >
             Location confidence
           </Text>
           <LanguageSwitch />
@@ -92,7 +97,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   title: {
-    flexShrink: 1,
+    flex: 1,
     fontFamily: fonts.sign,
     fontWeight: '700',
     fontSize: 26,

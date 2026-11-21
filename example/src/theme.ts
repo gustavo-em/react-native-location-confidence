@@ -3,7 +3,8 @@ import type { EvidenceRelation } from 'react-native-location-confidence';
 
 /*
  * The look of the example app: a street chart. Cool paper, navy ink, and
- * one color for each thing the evidence can say.
+ * one color for each thing the evidence can say. Each of those three colors
+ * is dark enough for white words on top of it.
  */
 export const colors = {
   paper: '#F3F5F1',
@@ -13,7 +14,7 @@ export const colors = {
   block: '#E1E7E1',
   street: '#FCFDFB',
   inside: '#17805A',
-  inconclusive: '#A86F08',
+  inconclusive: '#96620A',
   outside: '#3F5F99',
   alarm: '#BF3A2B',
   white: '#FFFFFF',

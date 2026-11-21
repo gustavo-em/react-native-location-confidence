@@ -24,6 +24,9 @@ target 'LocationConfidenceExample' do
   )
 
   post_install do |installer|
+    # The street map of the simulator: adds the MapLibre package to the project.
+    $MLRN.post_install(installer)
+
     react_native_post_install(
       installer,
       config[:reactNativePath],

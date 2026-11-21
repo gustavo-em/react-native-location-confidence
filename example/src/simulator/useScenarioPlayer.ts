@@ -3,7 +3,12 @@ import {
   LocationConfidence,
   type ProximityReport,
 } from 'react-native-location-confidence';
-import type { Moment, ReadingOnTheMap, Scenario } from './scenarios';
+import type {
+  Moment,
+  PhoneActivityToPretend,
+  ReadingOnTheMap,
+  Scenario,
+} from './scenarios';
 import { ADDRESS, toCoordinates } from './world';
 
 /*
@@ -40,6 +45,10 @@ export type PlayerState = Readonly<{
   moment: Moment | null;
   /** The last readings the pretend GPS reported, oldest first. */
   readings: readonly ReadingOnTheMap[];
+  /** How many seconds in a row the pretend GPS reported nothing. */
+  secondsWithoutAReading: number;
+  /** What the pretend phone reports about its movement. Null: nothing. */
+  phoneActivity: PhoneActivityToPretend;
   report: ProximityReport | null;
   /** The answers of this run, oldest first, for the strip under the index. */
   answers: readonly ProximityReport[];
@@ -52,6 +61,8 @@ const NOTHING_PLAYED_YET: PlayerState = {
   second: 0,
   moment: null,
   readings: [],
+  secondsWithoutAReading: 0,
+  phoneActivity: null,
   report: null,
   answers: [],
   problem: null,
@@ -121,6 +132,14 @@ export function useScenarioPlayer(): {
             readings: [...before.readings, ...moment.readings].slice(
               -READINGS_SHOWN_ON_THE_MAP
             ),
+            secondsWithoutAReading:
+              moment.readings.length > 0
+                ? 0
+                : before.secondsWithoutAReading + 1,
+            phoneActivity:
+              moment.phoneActivity !== undefined
+                ? moment.phoneActivity
+                : before.phoneActivity,
           }));
 
           // 1. Ask. The request is now waiting for a reading.

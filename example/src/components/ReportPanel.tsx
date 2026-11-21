@@ -20,17 +20,43 @@ type Props = Readonly<{
   whenEmpty: string;
 }>;
 
-function whatTheEvidenceSays(report: ProximityReport, texts: Texts): string {
+/**
+ * The answer in two parts: a small line and, under it, the large words.
+ * "Evidence points to" stays on the screen on purpose: the library reports
+ * what the evidence says, never where the phone is.
+ */
+function whatTheEvidenceSays(
+  report: ProximityReport,
+  texts: Texts
+): { smallLine: string; largeWords: string } {
   if (report.status === 'cancelled') {
-    return texts.report.requestCancelled;
+    return { smallLine: '', largeWords: texts.report.requestCancelled };
   } else if (report.measuredPosition === null) {
-    return texts.report.noReadingToJudge;
+    return { smallLine: '', largeWords: texts.report.noReadingToJudge };
   } else if (report.evidenceRelation === 'supports_inside') {
-    return texts.report.supportsInside;
+    return {
+      smallLine: texts.report.evidencePointsTo,
+      largeWords: texts.report.insideTheRadius,
+    };
   } else if (report.evidenceRelation === 'supports_outside') {
-    return texts.report.supportsOutside;
+    return {
+      smallLine: texts.report.evidencePointsTo,
+      largeWords: texts.report.outsideTheRadius,
+    };
   } else {
-    return texts.report.cannotTakeASide;
+    return {
+      smallLine: texts.report.theEvidence,
+      largeWords: texts.report.cannotTakeASide,
+    };
+  }
+}
+
+/** The color of the answer. With no reading there is no side to color. */
+function colorOfTheAnswer(report: ProximityReport): string {
+  if (report.measuredPosition === null) {
+    return colors.ink;
+  } else {
+    return colorOfRelation(report.evidenceRelation);
   }
 }
 
@@ -104,6 +130,37 @@ function theFacts(report: ProximityReport, texts: Texts): string {
 }
 
 /**
+ * The answer on a colored plate: the index as a large number and, beside
+ * it, what the evidence says and the main reason. The color is the side
+ * the evidence points to.
+ */
+function AnswerPlate({ report }: { report: ProximityReport }) {
+  const texts = useTexts();
+  const { smallLine, largeWords } = whatTheEvidenceSays(report, texts);
+  const why = whyInPlainWords(report, texts);
+
+  return (
+    <View style={[styles.plate, { backgroundColor: colorOfTheAnswer(report) }]}>
+      <View
+        style={styles.plateIndex}
+        accessible
+        accessibilityLabel={texts.report.indexForScreenReaders(
+          report.qualityScore
+        )}
+      >
+        <Text style={styles.index}>{report.qualityScore}</Text>
+        <Text style={styles.indexWord}>{texts.report.indexWord}</Text>
+      </View>
+      <View style={styles.plateWords}>
+        {smallLine !== '' && <Text style={styles.smallLine}>{smallLine}</Text>}
+        <Text style={styles.largeWords}>{largeWords}</Text>
+        {why !== '' && <Text style={styles.why}>{why}</Text>}
+      </View>
+    </View>
+  );
+}
+
+/**
  * The index on a ruler from 0 to 100. The filled part is the index. When
  * the score model lowered it, a notch marks where it was before the limits.
  */
@@ -121,27 +178,19 @@ function IndexRuler({ report }: { report: ProximityReport }) {
     : texts.report.indexCaption;
 
   return (
-    <View
-      accessible
-      accessibilityLabel={texts.report.indexForScreenReaders(index)}
-    >
-      <View style={styles.indexRow}>
-        <Text style={styles.index}>{index}</Text>
-        <View style={styles.ruler}>
-          <View style={styles.rulerTrack}>
-            <View style={[styles.rulerFill, { width: `${index}%` }]} />
-            {wasLowered && (
-              <View style={[styles.rulerNotch, { left: `${beforeLimits}%` }]} />
-            )}
-          </View>
-          <View style={styles.rulerTicks}>
-            {[0, 25, 50, 75, 100].map((tick) => (
-              <Text key={tick} style={styles.rulerTick}>
-                {tick}
-              </Text>
-            ))}
-          </View>
-        </View>
+    <View style={styles.ruler} importantForAccessibility="no-hide-descendants">
+      <View style={styles.rulerTrack}>
+        <View style={[styles.rulerFill, { width: `${index}%` }]} />
+        {wasLowered && (
+          <View style={[styles.rulerNotch, { left: `${beforeLimits}%` }]} />
+        )}
+      </View>
+      <View style={styles.rulerTicks}>
+        {[0, 25, 50, 75, 100].map((tick) => (
+          <Text key={tick} style={styles.rulerTick}>
+            {tick}
+          </Text>
+        ))}
       </View>
       <Text style={styles.indexCaption}>{caption}</Text>
     </View>
@@ -187,20 +236,12 @@ export function ReportPanel({ report, answers, whenEmpty }: Props) {
 
   return (
     <View>
+      <AnswerPlate report={report} />
       <IndexRuler report={report} />
       {answers !== undefined && answers.length > 1 && (
         <AnswerStrip answers={answers} />
       )}
 
-      <Text
-        style={[
-          styles.verdict,
-          { color: colorOfRelation(report.evidenceRelation) },
-        ]}
-      >
-        {whatTheEvidenceSays(report, texts)}
-      </Text>
-      <Text style={styles.why}>{whyInPlainWords(report, texts)}</Text>
       <Text style={styles.facts}>{theFacts(report, texts)}</Text>
 
       <View style={styles.reasons}>
@@ -220,24 +261,64 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     color: colors.inkSoft,
   },
-  indexRow: {
+  plate: {
     flexDirection: 'row',
     alignItems: 'center',
+    // Room for a reason of two lines, so that the plate keeps its height
+    // (and what is under it stays in place) while the answer changes.
+    minHeight: 104,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 4,
+  },
+  plateIndex: {
+    width: 76,
+    alignItems: 'center',
+    marginRight: 12,
+    paddingRight: 12,
+    borderRightWidth: 1,
+    borderRightColor: 'rgba(255, 255, 255, 0.45)',
   },
   index: {
-    width: 74,
     fontFamily: fonts.sign,
     fontWeight: '700',
-    fontSize: 52,
-    lineHeight: 56,
-    color: colors.ink,
+    fontSize: 50,
+    lineHeight: 52,
+    color: colors.white,
     fontVariant: ['tabular-nums'],
   },
-  ruler: {
+  indexWord: {
+    fontFamily: fonts.sign,
+    fontSize: 13,
+    lineHeight: 15,
+    color: colors.white,
+  },
+  plateWords: {
     flex: 1,
   },
+  smallLine: {
+    fontSize: 13,
+    lineHeight: 17,
+    color: colors.white,
+  },
+  largeWords: {
+    fontFamily: fonts.sign,
+    fontWeight: '700',
+    fontSize: 25,
+    lineHeight: 28,
+    color: colors.white,
+  },
+  why: {
+    marginTop: 3,
+    fontSize: 13,
+    lineHeight: 17,
+    color: colors.white,
+  },
+  ruler: {
+    marginTop: 10,
+  },
   rulerTrack: {
-    height: 14,
+    height: 10,
     backgroundColor: colors.white,
     borderWidth: 1,
     borderColor: colors.ink,
@@ -269,21 +350,8 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     color: colors.inkSoft,
   },
-  verdict: {
-    marginTop: 10,
-    fontFamily: fonts.sign,
-    fontWeight: '700',
-    fontSize: 22,
-    lineHeight: 26,
-  },
-  why: {
-    marginTop: 2,
-    fontSize: 15,
-    lineHeight: 20,
-    color: colors.ink,
-  },
   facts: {
-    marginTop: 4,
+    marginTop: 8,
     fontSize: 13,
     lineHeight: 18,
     color: colors.inkSoft,

@@ -13,7 +13,15 @@ Two screens, one library.
 | Fake GPS | The courier is far away and a fake-GPS app reports the door. |
 | Approximate only | Only the approximate location is allowed. |
 
-The map is drawn with plain Views: no map service, no key, no internet. Every coordinate is made up and the real GPS stays off.
+The streets on the map are real: Alameda Santos, one block from Avenida Paulista, in São Paulo. The courier, the GPS readings and the delivery address are made up, and the real GPS stays off.
+
+The street map is drawn by [MapLibre React Native](https://maplibre.org/maplibre-react-native/) with free tiles from [OpenFreeMap](https://openfreemap.org) (data from OpenStreetMap). It needs no key and no account. Three things to know about it:
+
+- It is part of the example app only. The library itself has no map and makes no network request.
+- It always shows the same public place. It never shows where the phone is, not even on the "This phone" screen, which has no map.
+- It downloads the tiles from the internet. With no connection the map stays blank and everything else still works.
+
+Two signs at the top of the map say what the pretend phone knows at each second: whether the GPS is delivering readings, and what the phone reports about its own movement.
 
 **This phone.** The same library with the real GPS: read the permissions, ask for the location, open a session, get a report, cancel.
 
@@ -47,7 +55,8 @@ yarn example ios
 |---|---|
 | `src/simulator/scenarios.ts` | The scripts of the six situations. |
 | `src/simulator/useScenarioPlayer.ts` | Plays a script against the library, one second at a time. |
-| `src/simulator/StreetMap.tsx` | The map. |
+| `src/simulator/world.ts` | The place of the simulation, and the conversion between meters on the map and latitude and longitude. |
+| `src/simulator/StreetMap.tsx` | The map: a real street map underneath, and on top of it what the simulation is doing. |
 | `src/components/ReportPanel.tsx` | Shows a report in plain words. |
 | `src/device/DeviceScreen.tsx` | The screen for the real GPS. |
 | `src/i18n/texts.ts` | Every sentence of the app, in English and in Portuguese. |
