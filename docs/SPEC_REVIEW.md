@@ -370,6 +370,19 @@ Consequência conhecida para INV-08: por leitura, o score e a incerteza são mon
 | Dependência extra | `react-native-safe-area-context`, só no exemplo | — |
 | Idioma | inglês e português, trocados na tela por um seletor no cabeçalho; começa no idioma do aparelho. Códigos de motivo e nomes de limites não são traduzidos. Pedido do owner em 17/11/2026 | não previsto |
 
+### R-36 [B] App de exemplo: mapa de ruas real (pedido do owner em 21/11/2026)
+
+A linha "Mapa" do R-33 dizia: desenhado com Views; nenhum serviço de mapas, chave ou rede. O owner pediu um mapa gratuito de alguma biblioteca para a demonstração. O que ficou:
+
+| Ponto | Escolha | Por quê |
+|---|---|---|
+| Biblioteca | MapLibre React Native, só no app de exemplo | código aberto, não pede chave nem conta, e funciona na Nova Arquitetura. O Google Maps pede chave no Android |
+| Mapas | OpenFreeMap, estilo "positron", com dados do OpenStreetMap | gratuito e sem cadastro; o estilo é claro, então as cores da resposta aparecem por cima. O crédito pedido fica escrito no canto do mapa |
+| O que o mapa mostra | sempre o mesmo lugar público; nunca a posição do aparelho | a tela "This phone" continua sem mapa. Assim nenhuma gravação ou captura mostra onde alguém está, e o servidor dos mapas só fica sabendo de um pedaço de São Paulo |
+| Rede | o exemplo passa a baixar os mapas pela internet; sem conexão o mapa fica em branco e o resto funciona | a biblioteca continua sem nenhum pedido de rede (regra da v1). Isso vale só para o exemplo |
+| Marcas da simulação | continuam sendo Views por cima do mapa, na mesma conta de metros para pontos da tela | mantém as animações e o código de antes; o mapa e as Views concordam porque os dois ficam centrados no endereço e o zoom sai do mesmo "metros de largura" |
+| Coordenadas | as ruas são reais; o endereço, o entregador e as leituras continuam inventados | a frase "toda coordenada é inventada" deixou de valer ao pé da letra e foi trocada no app e no `example/README.md` |
+
 ### R-34 [M] iOS: escolhas da Fase 5
 
 | Ponto | Escolha | Onde a SPEC ou a Fase 0 dizia outra coisa |

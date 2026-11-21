@@ -7,6 +7,10 @@ Every coordinate in these recordings is made up. The simulator feeds made-up
 GPS readings to the real library, so what the panel shows is what the engine
 really answers. No real location is read.
 
+These recordings show an earlier look of the example app, with a map drawn
+by the app itself. Since 21 November 2026 the simulator shows a real street
+map underneath. The six situations and their numbers are the same.
+
 There are three folders:
 
 | Folder | Recorded on | Language of the app |

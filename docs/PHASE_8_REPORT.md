@@ -208,3 +208,54 @@ O gate "dois dispositivos físicos" continua em aberto: há um Android e nenhum 
 Achado no app de exemplo, não corrigido: em tela de 720 px de largura o título do topo aparece cortado ("Location confi…"), porque divide a linha com o seletor de idioma.
 
 O README e `docs/COMPARISON.md` passaram a dizer o que rodou em aparelho físico e o que não rodou. O README publicado no npm continua o da versão 0.1.0 até uma nova versão.
+
+## Mapa de ruas no exemplo e segundo aparelho físico, em 21/11/2026
+
+A pedido do owner, o app de exemplo ganhou um mapa de ruas de verdade e rodou em um segundo celular dele, ligado por cabo.
+
+### O que mudou no app de exemplo
+
+| Ponto | Antes | Agora |
+|---|---|---|
+| Mapa do simulador | ruas inventadas, desenhadas com Views | mapa de ruas real por baixo (MapLibre React Native 11.5.1, com os mapas gratuitos do OpenFreeMap, dados do OpenStreetMap, sem chave e sem conta); por cima, as mesmas Views de antes |
+| Lugar da simulação | um ponto em uma praça de São Paulo, usado só para a conta | um ponto na Alameda Santos, a 100 m da esquina com a Alameda Ministro Rocha Azevedo, a uma quadra da Avenida Paulista |
+| Roteiros | em metros a leste e ao norte do endereço | os mesmos números, agora medidos ao longo da rua do endereço (x) e para a esquerda dela (y). O arquivo `world.ts` gira essa medida para latitude e longitude |
+| Resposta | número grande, régua e frase colorida | uma placa da cor da resposta com o índice e, ao lado, "A evidência aponta para" e "dentro do raio" em letras grandes; a régua ficou embaixo. A placa tem altura fixa, para o que está abaixo dela não pular quando a frase muda de uma linha para duas |
+| Placas no mapa | não havia | duas, no topo: se o GPS está entregando leitura ("GPS mudo há 9 s") e o que o celular informa sobre o próprio movimento ("Celular informa: parado") |
+| Marcas no mapa | círculo para o entregador, losango para o endereço | alfinete no endereço, etiqueta "entregador", e uma etiqueta junto da área: "pode estar a até 84 m" |
+| Título do topo | cortado em tela de 720 px | encolhe para caber |
+
+Os roteiros não mudaram de números: as distâncias, velocidades e tempos são os mesmos. Com o giro, o caminho do cenário "Chegando" cai em cima de ruas reais (conferido com a geometria do OpenStreetMap: no máximo 0,6 m de distância do eixo da rua), no sentido em que elas são mão única. No cenário "GPS falso", o ponto onde o entregador está de verdade é a esquina com a Avenida Paulista.
+
+Verificado nesta data: `yarn typecheck` e `yarn lint` passam; o APK release compila para `arm64-v8a` e `armeabi-v7a`; no iOS, `pod install` e o build Release para o simulador passam (o app não foi aberto no simulador depois da mudança).
+
+### Segundo aparelho
+
+| | |
+|---|---|
+| Aparelho | Samsung Galaxy M53 5G (SM-M536B), Android 14 (SDK 34), ARM de 64 bits, com Google Play Services |
+| Build | APK release do app de exemplo, com o mapa novo |
+| O que rodou | só a tela "Entregador simulado": as seis situações, em português, e duas delas também em inglês |
+| Internet | Wi-Fi ligado, para o mapa |
+
+O que a tela mostrou no fim de cada situação:
+
+| Situação | Índice | Para onde a evidência aponta | Detalhe mostrado |
+|---|---|---|---|
+| Chegando | 97 | dentro do raio | leitura a 30 m do endereço; celular a até 8 m dela |
+| Salto de GPS | 75 no meio, 97 no fim | dentro do raio | no meio: 86 antes do limite `conflicting_evidence`; no fim, as leituras concordam |
+| Sinal perdido | 15 | não aponta um lado | 17 s sem leitura; celular a até 405 m; 69 antes dos limites `cached`, `uncertainty_at_least_100m`, `uncertainty_at_least_300m` |
+| Sem sinal, parado | 60 | dentro do raio | o mesmo silêncio; celular a até 17 m; 88 antes do limite `cached` |
+| GPS falso | 0 | não aponta um lado | 96 antes do limite `mock_location` |
+| Só aproximada | 15 | não aponta um lado | celular a até 2023 m; 55 antes dos limites |
+
+São os mesmos números do emulador. O mapa abriu na primeira tentativa, e a tela do celular grava a cerca de 30 quadros por segundo pelo `adb`, o que serviu para um vídeo novo.
+
+O que este teste não cobre:
+
+- **GPS real neste aparelho.** Não rodou. O pedido de permissão de localização não chegou a ser feito: a escolha no diálogo é do owner, e o toque que abre o diálogo ficou para ele.
+- Tudo o que o teste de 18/11 já não cobria: rua aberta, GPS mudo de verdade, permissão aproximada, app de GPS falso, iPhone físico.
+
+Com GPS real, portanto, continua havendo um aparelho só (o Galaxy J6). O README e `docs/COMPARISON.md` continuam dizendo "um celular Android", o que segue correto para o GPS real.
+
+As gravações em `docs/demo` são da aparência anterior do exemplo, com o mapa desenhado. Ainda não foram refeitas.

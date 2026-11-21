@@ -21,6 +21,8 @@ Só uma tela existe por vez. Sair do simulador desliga a simulação, então a o
 
 O ponto fixo no globo é uma praça pública em São Paulo, usado só para a conta de metros para graus.
 
+Desde 21/11/2026 o simulador mostra um mapa de ruas real por baixo, e o ponto fixo passou a ser um ponto na Alameda Santos, em São Paulo. As ruas são reais; o endereço, o entregador e as leituras continuam inventados, e o mapa nunca mostra a posição do aparelho. Os detalhes estão em `docs/PHASE_8_REPORT.md` e no R-36 de `docs/SPEC_REVIEW.md`.
+
 ## Ordem das chamadas no simulador
 
 ```text
